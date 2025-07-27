@@ -55,7 +55,7 @@ def get_contact(message):
 def get_name(message):
     user_data[message.chat.id]["name"] = message.text
     bot.send_message(message.chat.id, "✅ ثبت شد. منتظر تماس کارشناسان باشید.")
-    bot.send_message(ADMIN_ID, f"👤 {message.text} نام کاربر
+    bot.send_message(ADMIN_ID, f"نام کاربر: {message.text}")
 📞 {user_data[message.chat.id]['phone']}")
 
 if __name__ == "__main__":
