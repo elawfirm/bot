@@ -31,7 +31,7 @@ def panel():
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     bot.send_message(message.chat.id, "سلام عزیزم، به ربات حقوقی خوش اومدی. لطفاً مشکلت رو برام بنویس 📝")
-    bot.send_message(ADMIN_ID, f"🟢 کاربر جدید شروع کرد:
+   bot.send_message(ADMIN_ID, f"کاربر جدید شروع کرد: {message.from_user.first_name}")
 👤 {message.chat.first_name} ({message.chat.id})")
 
 # All text messages
