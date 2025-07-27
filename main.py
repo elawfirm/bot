@@ -1,10 +1,14 @@
+# main.py with login and export
 import os
 import sqlite3
-from flask import Flask, request
+import csv
+from flask import Flask, request, render_template_string, send_from_directory, redirect, url_for
+
 import telebot
 
 TOKEN = "8010785406:AAGU3XARPR_GzihDYS8T624bPTEU8ildmQ8"
 ADMIN_ID = 7549512366
+ADMIN_PASS = "admin123"  # رمز عبور ساده برای ورود به پنل
 
 bot = telebot.TeleBot(TOKEN, parse_mode="Markdown")
 app = Flask(__name__)
@@ -40,6 +44,7 @@ def save_user(chat_id, name, phone, problem, voice_file):
 init_db()
 user_state = {}
 
+# Telegram handlers
 @bot.message_handler(commands=["start"])
 def start(message):
     chat_id = message.chat.id
@@ -136,6 +141,58 @@ def webhook():
 @app.route('/')
 def index():
     return "Legal bot is running.", 200
+
+# پنل با لاگین ساده
+@app.route('/panel', methods=['GET'])
+def panel():
+    password = request.args.get("pass")
+    if password != ADMIN_PASS:
+        return "<h3>رمز اشتباه است. ?pass=ADMIN_PASS</h3>"
+
+    conn = sqlite3.connect("users.db")
+    c = conn.cursor()
+    c.execute("SELECT * FROM users ORDER BY id DESC")
+    rows = c.fetchall()
+    conn.close()
+
+    html = '<html><head><meta charset="UTF-8"><title>پنل مدیریت</title></head><body>'
+    html += f"<h2>درخواست‌ها (رمز: {ADMIN_PASS})</h2><table border='1'><tr><th>ID</th><th>نام</th><th>شماره</th><th>مشکل</th><th>ویس</th></tr>"
+    for r in rows:
+        voice_link = f"<a href='/voice/{r[0]}?pass={ADMIN_PASS}'>دانلود</a>" if r[5] else "-"
+        html += f"<tr><td>{r[0]}</td><td>{r[2]}</td><td>{r[3]}</td><td>{r[4]}</td><td>{voice_link}</td></tr>"
+    html += "</table><br><a href='/export?pass={ADMIN_PASS}'>دانلود Excel</a></body></html>"
+    return html
+
+@app.route('/voice/<int:uid>')
+def voice(uid):
+    password = request.args.get("pass")
+    if password != ADMIN_PASS:
+        return "Access Denied", 403
+    conn = sqlite3.connect("users.db")
+    c = conn.cursor()
+    c.execute("SELECT voice_file FROM users WHERE id=?",(uid,))
+    row = c.fetchone()
+    conn.close()
+    if row and row[0]:
+        return send_from_directory('.', row[0], as_attachment=True)
+    return "File not found", 404
+
+@app.route('/export')
+def export():
+    password = request.args.get("pass")
+    if password != ADMIN_PASS:
+        return "Access Denied", 403
+    conn = sqlite3.connect("users.db")
+    c = conn.cursor()
+    c.execute("SELECT id, name, phone, problem FROM users")
+    rows = c.fetchall()
+    conn.close()
+    filename = "export.csv"
+    with open(filename, "w", newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        writer.writerow(["ID", "Name", "Phone", "Problem"])
+        writer.writerows(rows)
+    return send_from_directory('.', filename, as_attachment=True)
 
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 5000))
