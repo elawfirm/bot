@@ -150,7 +150,7 @@ def handle_all(message):
 # -------------------- Flask (Webhook endpoint) --------------------
 
 # مسیر باید دقیقا برابر با توکن باشد
-@app.route("/" + TOKEN, methods=["POST"])
+@app.route('/8010785406:AAGU3XARPR_GzihDYS8T624bPTEU8ildmQ8', methods=["POST"])
 def webhook():
     update = telebot.types.Update.de_json(request.data.decode("utf-8"))
     bot.process_new_updates([update])
