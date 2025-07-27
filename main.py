@@ -57,7 +57,7 @@ def messages(message):
         bot.send_message(chat_id, "✅ اطلاعات شما ثبت شد. منتظر پاسخ باشید.")
         info = user_data[chat_id]
         bot.send_message(ADMIN_ID, f"📩 اطلاعات جدید از: {message.from_user.first_name}")
-👤 نام: {info.get('name')}
+f"👤 نام: {info.get('name')}"
 📞 شماره: {info.get('contact')}
 📝 مشکل: {info.get('problem')}")
         user_data.pop(chat_id)
