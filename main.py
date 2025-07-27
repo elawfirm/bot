@@ -119,6 +119,7 @@ def get_message():
     bot.process_new_updates([update])
     return '', 200
 
+
 @app.route('/')
 def index():
     return "Legal Bot is running via webhook."
