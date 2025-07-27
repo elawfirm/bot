@@ -1,199 +1,105 @@
-# main.py with login and export
-import os
-import sqlite3
-import csv
-from flask import Flask, request, render_template_string, send_from_directory, redirect, url_for
-
+from flask import Flask, request
 import telebot
+import threading
+import time
 
-TOKEN = "8010785406:AAGU3XARPR_GzihDYS8T624bPTEU8ildmQ8"
+API_TOKEN = '8010785406:AAGU3XARPR_GzihDYS8T624bPTEU8ildmQ8'
 ADMIN_ID = 7549512366
-ADMIN_PASS = "admin123"  # رمز عبور ساده برای ورود به پنل
 
-bot = telebot.TeleBot(TOKEN, parse_mode="Markdown")
+bot = telebot.TeleBot(API_TOKEN, threaded=True)
 app = Flask(__name__)
 
-os.makedirs("voices", exist_ok=True)
+user_states = {}
+user_data = {}
 
-def init_db():
-    conn = sqlite3.connect("users.db")
-    c = conn.cursor()
-    c.execute(
-        '''CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            name TEXT,
-            phone TEXT,
-            problem TEXT,
-            voice_file TEXT
-        )'''
-    )
-    conn.commit()
-    conn.close()
+TIMEOUT_SECONDS = 120
+RESET_SECONDS = 300
 
-def save_user(chat_id, name, phone, problem, voice_file):
-    conn = sqlite3.connect("users.db")
-    c = conn.cursor()
-    c.execute(
-        "INSERT INTO users (user_id, name, phone, problem, voice_file) VALUES (?, ?, ?, ?, ?)",
-        (chat_id, name, phone, problem, voice_file),
-    )
-    conn.commit()
-    conn.close()
+def timeout_checker(chat_id, step):
+    time.sleep(TIMEOUT_SECONDS)
+    if user_states.get(chat_id) == step:
+        bot.send_message(chat_id, "⏳ هنوز پاسخی دریافت نکردیم. لطفاً ادامه بده.")
 
-init_db()
-user_state = {}
+    time.sleep(RESET_SECONDS - TIMEOUT_SECONDS)
+    if user_states.get(chat_id) == step:
+        bot.send_message(chat_id, "❗️مشاوره لغو شد. لطفاً مجدد شروع کن", reply_markup=start_markup())
+        user_states.pop(chat_id, None)
+        user_data.pop(chat_id, None)
 
-# Telegram handlers
-@bot.message_handler(commands=["start"])
+def start_markup():
+    markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
+    btn = telebot.types.KeyboardButton("بزن بریم 😍✅", request_contact=False)
+    markup.add(btn)
+    return markup
+
+@bot.message_handler(commands=['start'])
 def start(message):
-    chat_id = message.chat.id
-    user_state[chat_id] = {"step": "phone"}
-    kb = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    kb.add(telebot.types.KeyboardButton("📱 ارسال شماره تماس", request_contact=True))
-    bot.send_message(
-        chat_id,
-        "⚖️ *به هلدینگ حقوقی الای خوش آمدید.*\n"
-        "برای رزرو وقت مشاوره مراحل زیر را کامل کنید.\n\n"
-        "📱 لطفاً شماره تماس خود را ارسال کنید:",
-        reply_markup=kb,
-    )
+    bot.send_message(message.chat.id, "سلام عزیزم ممنون از اعتمادتون 🌟
+هلدینگ حقوقی الای در خدمت شماست.
+برای رزرو مشاوره حقوقی لطفاً روی دکمه زیر بزنید.", reply_markup=start_markup())
 
-@bot.message_handler(content_types=["contact"])
-def contact_handler(message):
-    chat_id = message.chat.id
-    phone = message.contact.phone_number
-    user_state[chat_id] = {"phone": phone, "step": "name"}
-    bot.send_message(
-        chat_id,
-        f"📞 شماره شما ثبت شد: {phone}\n"
-        "👤 لطفاً نام و نام خانوادگی خود را وارد کنید:",
-        reply_markup=telebot.types.ReplyKeyboardRemove(),
-    )
+@bot.message_handler(func=lambda m: m.text == "بزن بریم 😍✅")
+def ask_phone(message):
+    markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
+    btn = telebot.types.KeyboardButton("📞 ارسال شماره تماس", request_contact=True)
+    markup.add(btn)
+    bot.send_message(message.chat.id, "شماره تماس‌تون رو لطفاً ارسال کنید:", reply_markup=markup)
+    user_states[message.chat.id] = "awaiting_phone"
+    threading.Thread(target=timeout_checker, args=(message.chat.id, "awaiting_phone")).start()
 
-@bot.message_handler(func=lambda m: True, content_types=["text", "voice"])
-def handle_all(message):
-    chat_id = message.chat.id
-    if chat_id not in user_state:
-        bot.reply_to(message, "برای شروع از دستور /start استفاده کنید.")
-        return
+@bot.message_handler(content_types=['contact'])
+def save_contact(message):
+    if user_states.get(message.chat.id) == "awaiting_phone":
+        user_data[message.chat.id] = {"phone": message.contact.phone_number}
+        bot.send_message(message.chat.id, "نام و نام خانوادگی‌تون رو وارد کنید:")
+        user_states[message.chat.id] = "awaiting_name"
+        threading.Thread(target=timeout_checker, args=(message.chat.id, "awaiting_name")).start()
 
-    step = user_state[chat_id]["step"]
+@bot.message_handler(func=lambda m: user_states.get(m.chat.id) == "awaiting_name")
+def save_name(message):
+    user_data[message.chat.id]["name"] = message.text
+    bot.send_message(message.chat.id, "لطفاً مشکل خود را به‌صورت ویس یا پیام متنی بفرستید.")
+    user_states[message.chat.id] = "awaiting_problem"
+    threading.Thread(target=timeout_checker, args=(message.chat.id, "awaiting_problem")).start()
 
-    if step == "phone":
-        phone = message.text
-        user_state[chat_id]["phone"] = phone
-        user_state[chat_id]["step"] = "name"
-        bot.send_message(
-            chat_id,
-            f"📞 شماره شما ثبت شد: {phone}\n"
-            "👤 لطفاً نام و نام خانوادگی خود را وارد کنید:",
-        )
+@bot.message_handler(content_types=['voice', 'text'])
+def save_problem(message):
+    if user_states.get(message.chat.id) == "awaiting_problem":
+        user_data[message.chat.id]["problem"] = message.voice.file_id if message.content_type == 'voice' else message.text
 
-    elif step == "name":
-        user_state[chat_id]["name"] = message.text
-        user_state[chat_id]["step"] = "problem"
-        bot.send_message(chat_id, "📝 لطفاً مشکل یا موضوع حقوقی خود را به صورت متن یا ویس ارسال کنید:")
+        # ارسال برای ادمین
+        info = user_data[message.chat.id]
+        bot.send_message(ADMIN_ID, f"📥 درخواست جدید:
 
-    elif step == "problem":
-        voice_path = None
-        if message.content_type == "voice":
-            file_info = bot.get_file(message.voice.file_id)
-            voice_path = f"voices/{chat_id}_{message.voice.file_id}.ogg"
-            data = bot.download_file(file_info.file_path)
-            with open(voice_path, "wb") as f:
-                f.write(data)
-            problem_text = "Voice Message"
-        else:
-            problem_text = message.text
+👤 نام: {info['name']}
+📞 شماره: {info['phone']}")
+        if "problem" in info:
+            if message.content_type == 'voice':
+                bot.send_voice(ADMIN_ID, info["problem"])
+            else:
+                bot.send_message(ADMIN_ID, f"📝 مشکل:
+{info['problem']}")
 
-        save_user(
-            chat_id,
-            user_state[chat_id]["name"],
-            user_state[chat_id]["phone"],
-            problem_text,
-            voice_path,
-        )
+        bot.send_message(message.chat.id, "✅ اطلاعات شما ثبت شد.
+مشاورین ما در اسرع وقت تماس می‌گیرند.
+در صورت نیاز فوری: 09001003914")
+        user_states.pop(message.chat.id, None)
+        user_data.pop(message.chat.id, None)
 
-        bot.send_message(
-            ADMIN_ID,
-            "🔔 *درخواست جدید مشاوره*\n"
-            f"👤 نام: {user_state[chat_id]['name']}\n"
-            f"📞 شماره: {user_state[chat_id]['phone']}\n"
-            f"📝 مشکل: {'ویس ارسال شد' if voice_path else problem_text}",
-        )
-
-        bot.send_message(
-            chat_id,
-            "✅ اطلاعات شما با موفقیت ثبت شد.\n"
-            "کارشناسان ما در اسرع وقت با شما تماس می‌گیرند.\n\n"
-            "☎️ برای مشاوره فوری: 09001003914",
-            reply_markup=telebot.types.ReplyKeyboardRemove(),
-        )
-        del user_state[chat_id]
-
-@app.route('/' + TOKEN, methods=['POST'])
+# Flask route for webhook (Render will call this)
+@app.route(f"/{API_TOKEN}", methods=["POST"])
 def webhook():
-    update = telebot.types.Update.de_json(request.data.decode('utf-8'))
-    bot.process_new_updates([update])
-    return "OK", 200
+    bot.process_new_updates([telebot.types.Update.de_json(request.stream.read().decode("utf-8"))])
+    return '', 200
 
 @app.route('/')
-def index():
-    return "Legal bot is running.", 200
+def home():
+    return "ربات مشاوره حقوقی فعال است."
 
-# پنل با لاگین ساده
-@app.route('/panel', methods=['GET'])
-def panel():
-    password = request.args.get("pass")
-    if password != ADMIN_PASS:
-        return "<h3>رمز اشتباه است. ?pass=ADMIN_PASS</h3>"
-
-    conn = sqlite3.connect("users.db")
-    c = conn.cursor()
-    c.execute("SELECT * FROM users ORDER BY id DESC")
-    rows = c.fetchall()
-    conn.close()
-
-    html = '<html><head><meta charset="UTF-8"><title>پنل مدیریت</title></head><body>'
-    html += f"<h2>درخواست‌ها (رمز: {ADMIN_PASS})</h2><table border='1'><tr><th>ID</th><th>نام</th><th>شماره</th><th>مشکل</th><th>ویس</th></tr>"
-    for r in rows:
-        voice_link = f"<a href='/voice/{r[0]}?pass={ADMIN_PASS}'>دانلود</a>" if r[5] else "-"
-        html += f"<tr><td>{r[0]}</td><td>{r[2]}</td><td>{r[3]}</td><td>{r[4]}</td><td>{voice_link}</td></tr>"
-    html += "</table><br><a href='/export?pass={ADMIN_PASS}'>دانلود Excel</a></body></html>"
-    return html
-
-@app.route('/voice/<int:uid>')
-def voice(uid):
-    password = request.args.get("pass")
-    if password != ADMIN_PASS:
-        return "Access Denied", 403
-    conn = sqlite3.connect("users.db")
-    c = conn.cursor()
-    c.execute("SELECT voice_file FROM users WHERE id=?",(uid,))
-    row = c.fetchone()
-    conn.close()
-    if row and row[0]:
-        return send_from_directory('.', row[0], as_attachment=True)
-    return "File not found", 404
-
-@app.route('/export')
-def export():
-    password = request.args.get("pass")
-    if password != ADMIN_PASS:
-        return "Access Denied", 403
-    conn = sqlite3.connect("users.db")
-    c = conn.cursor()
-    c.execute("SELECT id, name, phone, problem FROM users")
-    rows = c.fetchall()
-    conn.close()
-    filename = "export.csv"
-    with open(filename, "w", newline='', encoding='utf-8') as f:
-        writer = csv.writer(f)
-        writer.writerow(["ID", "Name", "Phone", "Problem"])
-        writer.writerows(rows)
-    return send_from_directory('.', filename, as_attachment=True)
+def run():
+    bot.remove_webhook()
+    bot.set_webhook(url=f"https://bot-llf5.onrender.com/{API_TOKEN}")
+    app.run(host="0.0.0.0", port=10000)
 
 if __name__ == "__main__":
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+    run()
