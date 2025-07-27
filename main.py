@@ -152,18 +152,33 @@ def problem_handler(message):
     user_buf.pop(chat_id, None)
 
 # -------------------- مسیرهای Flask --------------------
-@app.route("/" + TOKEN, methods=["POST"])
-def webhook():
-    try:
-        update = telebot.types.Update.de_json(request.data.decode("utf-8"))
-        bot.process_new_updates([update])
-    except Exception as e:
-        print("Error in webhook:", e)
-    return "OK", 200
+from flask import Flask, request, jsonify, send_file
+import telebot
+import os
+
+TOKEN = "8010785406:AAGU3XARPR_GzihDYS8T624bPTEU8ildmQ8"
+bot = telebot.TeleBot(TOKEN)
+
+app = Flask(__name__)
+
+@app.route('/' + TOKEN, methods=['POST'])
+def getMessage():
+    bot.process_new_updates([telebot.types.Update.de_json(request.stream.read().decode("utf-8"))])
+    return "!", 200
+
+@app.route("/panel", methods=['GET'])
+def panel():
+    password = request.args.get("pass")
+    if password != "admin123":
+        return "Access Denied", 403
+    return "<h1>Legal Bot Panel</h1><p>اطلاعات کاربران در اینجا نمایش داده می‌شود.</p>"
 
 @app.route("/")
-def index():
-    return "Legal Bot is running.", 200
+def webhook():
+    bot.remove_webhook()
+    bot.set_webhook(url="https://bot-ll15.onrender.com/" + TOKEN)
+    return "Webhook set", 200
+
 
 @app.route("/panel")
 def panel():
