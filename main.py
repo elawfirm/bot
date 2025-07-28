@@ -13,17 +13,19 @@ app = Flask(__name__)
 user_state = {}
 user_data = {}
 
-# مرحله 1: درخواست شماره تماس
 @bot.message_handler(commands=['start'])
 def start(message):
     user_id = message.chat.id
     user_state[user_id] = 'awaiting_contact'
     markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    button = KeyboardButton("📞 ارسال شماره تماس", request_contact=True)
-    markup.add(button)
-    bot.send_message(user_id, "لطفاً شماره تماس خود را وارد کنید یا از دکمه زیر استفاده نمایید:", reply_markup=markup)
+    markup.add(KeyboardButton("📞 ارسال شماره تماس", request_contact=True))
+    bot.send_message(user_id,
+                     "📞 لطفاً شماره تماس خود را وارد نمایید.
 
-# دریافت شماره تماس
+"
+                     "✅ می‌توانید شماره را *تایپ کنید* یا برای راحتی بیشتر، از دکمه‌ی زیر استفاده نمایید:",
+                     reply_markup=markup, parse_mode="Markdown")
+
 @bot.message_handler(content_types=['contact'])
 def get_contact(message):
     user_id = message.chat.id
@@ -31,64 +33,70 @@ def get_contact(message):
         phone = message.contact.phone_number
         user_data[user_id] = {'phone': phone}
         user_state[user_id] = 'awaiting_name'
-        bot.send_message(user_id, "✅ شماره شما ثبت شد.\n\nلطفاً نام و نام خانوادگی خود را ارسال کنید:", reply_markup=telebot.types.ReplyKeyboardRemove())
+        bot.send_message(user_id, "✍️ لطفاً نام و نام خانوادگی خود را وارد نمایید:",
+                         reply_markup=telebot.types.ReplyKeyboardRemove())
 
-# دریافت نام و نام خانوادگی
 @bot.message_handler(func=lambda m: user_state.get(m.chat.id) == 'awaiting_name')
 def get_name(message):
     user_id = message.chat.id
-    user_data[user_id]['name'] = message.text
+    user_data[user_id]['name'] = message.text.strip()
     user_state[user_id] = 'awaiting_problem'
-    bot.send_message(user_id, "📝 لطفاً مشکل خود را با نوشتن یا ارسال ویس توضیح دهید:")
+    bot.send_message(user_id, "📝 لطفاً مشکل حقوقی خود را توضیح دهید.
+"
+                              "می‌توانید *متن تایپ کنید* یا *ویس ارسال نمایید*.", parse_mode="Markdown")
 
-# دریافت مشکل (متن یا ویس)
 @bot.message_handler(content_types=['text', 'voice'])
 def get_problem(message):
     user_id = message.chat.id
     if user_state.get(user_id) == 'awaiting_problem':
-        contact = user_data[user_id].get('phone', 'ثبت نشده')
-        name = user_data[user_id].get('name', 'ثبت نشده')
+        contact = user_data[user_id].get('phone', 'نامشخص')
+        name = user_data[user_id].get('name', 'نامشخص')
 
         if message.content_type == 'voice':
-            file_id = message.voice.file_id
-            bot.send_voice(ADMIN_ID, file_id, caption=f"📞 شماره: {contact}\n👤 نام: {name}\n🎙 کاربر یک ویس ارسال کرد.")
+            bot.send_voice(ADMIN_ID, message.voice.file_id,
+                           caption=f"📞 شماره تماس: {contact}
+👤 نام: {name}
+🎙 ویس ارسالی از کاربر.")
         else:
-            bot.send_message(ADMIN_ID, f"📞 شماره: {contact}\n👤 نام: {name}\n📌 مشکل: {message.text}")
+            bot.send_message(ADMIN_ID, f"📞 شماره تماس: {contact}
+👤 نام: {name}
+📝 شرح مشکل:
+{message.text}")
 
-        bot.send_message(user_id, "✅ اطلاعات شما با موفقیت ثبت شد. تیم حقوقی به‌زودی با شما تماس خواهد گرفت.")
+        bot.send_message(user_id,
+                         "✅ اطلاعات شما با موفقیت ثبت شد.
+"
+                         "👩‍⚖️ کارشناسان حقوقی ما در اسرع وقت با شما تماس خواهند گرفت.
 
-        # دکمه شروع مجدد
-        markup = ReplyKeyboardMarkup(resize_keyboard=True)
+"
+                         "☎️ نیاز به مشاوره فوری دارید؟
+📞 09001003914", parse_mode="Markdown")
+
+        markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
         markup.add(KeyboardButton("🔁 شروع مجدد"))
-        bot.send_message(user_id, "برای ارسال درخواست جدید، روی دکمه زیر بزنید:", reply_markup=markup)
+        bot.send_message(user_id, "برای ثبت درخواست جدید، روی دکمه زیر کلیک کنید:", reply_markup=markup)
         user_state[user_id] = 'done'
 
-# هندلر شروع مجدد
 @bot.message_handler(func=lambda m: m.text == "🔁 شروع مجدد")
 def restart(message):
     start(message)
 
-# ────────────── Flask Webhook ────────────── #
 @app.route('/webhook', methods=['POST'])
 def webhook():
     if request.headers.get('content-type') == 'application/json':
-        json_string = request.get_data().decode('utf-8')
-        update = telebot.types.Update.de_json(json_string)
+        update = telebot.types.Update.de_json(request.get_data().decode('utf-8'))
         bot.process_new_updates([update])
         return '', 200
-    else:
-        return 'Invalid request', 403
+    return '', 403
 
 @app.route('/')
 def index():
-    return 'ربات حقوقی فعال است ✅'
+    return 'ربات فعال است ✅'
 
-# تنظیم خودکار Webhook
 def set_webhook():
     bot.remove_webhook()
     bot.set_webhook(url=WEBHOOK_URL)
 
 if __name__ == '__main__':
     set_webhook()
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
