@@ -1,97 +1,94 @@
 import telebot
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton
 from flask import Flask, request
+import os
 
-API_TOKEN = "8010785406:AAGU3XARPR_GzihDYS8T624bPTEU8ildmQ8"
+API_TOKEN = '8010785406:AAGU3XARPR_GzihDYS8T624bPTEU8ildmQ8'
 ADMIN_ID = 7549512366
-WEBHOOK_URL = "https://bot-ltl5.onrender.com/webhook"
+WEBHOOK_URL = 'https://bot-ltl5.onrender.com/webhook'
 
 bot = telebot.TeleBot(API_TOKEN)
 app = Flask(__name__)
 
+user_state = {}
 user_data = {}
 
-# مرحله اول: دریافت شماره تماس
+# مرحله 1: درخواست شماره تماس
 @bot.message_handler(commands=['start'])
 def start(message):
-    chat_id = message.chat.id
+    user_id = message.chat.id
+    user_state[user_id] = 'awaiting_contact'
     markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    btn = KeyboardButton("📞 ارسال شماره تماس", request_contact=True)
-    markup.add(btn)
-    bot.send_message(
-        chat_id,
-        "📞 لطفاً شماره تماس خود را وارد نمایید.
+    button = KeyboardButton("📞 ارسال شماره تماس", request_contact=True)
+    markup.add(button)
+    bot.send_message(user_id, "لطفاً شماره تماس خود را وارد کنید یا از دکمه زیر استفاده نمایید:", reply_markup=markup)
 
-"
-        "✅ می‌توانید شماره را *تایپ کنید* یا برای راحتی بیشتر، از دکمه‌ی زیر استفاده نمایید:",
-        reply_markup=markup,
-        parse_mode="Markdown"
-    )
-    user_data[chat_id] = {}
-
+# دریافت شماره تماس
 @bot.message_handler(content_types=['contact'])
 def get_contact(message):
-    chat_id = message.chat.id
-    contact = message.contact.phone_number
-    user_data[chat_id]['phone'] = contact
-    bot.send_message(chat_id, "✅ شماره تماس دریافت شد.
+    user_id = message.chat.id
+    if user_state.get(user_id) == 'awaiting_contact':
+        phone = message.contact.phone_number
+        user_data[user_id] = {'phone': phone}
+        user_state[user_id] = 'awaiting_name'
+        bot.send_message(user_id, "✅ شماره شما ثبت شد.\n\nلطفاً نام و نام خانوادگی خود را ارسال کنید:", reply_markup=telebot.types.ReplyKeyboardRemove())
 
-لطفا نام و نام خانوادگی خود را وارد کنید:")
-    
-@bot.message_handler(func=lambda message: message.chat.id in user_data and 'phone' in user_data[message.chat.id] and 'name' not in user_data[message.chat.id], content_types=['text'])
+# دریافت نام و نام خانوادگی
+@bot.message_handler(func=lambda m: user_state.get(m.chat.id) == 'awaiting_name')
 def get_name(message):
-    chat_id = message.chat.id
-    name = message.text
-    user_data[chat_id]['name'] = name
-    bot.send_message(chat_id, "✅ نام ثبت شد.
+    user_id = message.chat.id
+    user_data[user_id]['name'] = message.text
+    user_state[user_id] = 'awaiting_problem'
+    bot.send_message(user_id, "📝 لطفاً مشکل خود را با نوشتن یا ارسال ویس توضیح دهید:")
 
-حالا لطفا مشکل خود را به صورت متن یا ویس ارسال کنید:")
-
-@bot.message_handler(func=lambda message: message.chat.id in user_data and 'name' in user_data[message.chat.id], content_types=['text', 'voice'])
+# دریافت مشکل (متن یا ویس)
+@bot.message_handler(content_types=['text', 'voice'])
 def get_problem(message):
-    chat_id = message.chat.id
-    data = user_data.get(chat_id, {})
-    name = data.get('name', 'نامشخص')
-    phone = data.get('phone', 'نامشخص')
+    user_id = message.chat.id
+    if user_state.get(user_id) == 'awaiting_problem':
+        contact = user_data[user_id].get('phone', 'ثبت نشده')
+        name = user_data[user_id].get('name', 'ثبت نشده')
 
-    if message.content_type == 'text':
-        problem = message.text
-        bot.send_message(chat_id, "✅ مشکل شما ثبت شد. تیم ما بزودی با شما تماس خواهد گرفت.")
-        bot.send_message(ADMIN_ID, f"📥 درخواست جدید:
-👤 نام: {name}
-📞 شماره: {phone}
-📝 مشکل: {problem}")
-    elif message.content_type == 'voice':
-        file_id = message.voice.file_id
-        bot.send_message(chat_id, "✅ ویس شما ثبت شد. تیم ما بزودی بررسی خواهد کرد.")
-        bot.send_message(ADMIN_ID, f"📥 درخواست جدید:
-👤 نام: {name}
-📞 شماره: {phone}
-🎙 ویس:")
-        bot.forward_message(ADMIN_ID, chat_id, message.message_id)
+        if message.content_type == 'voice':
+            file_id = message.voice.file_id
+            bot.send_voice(ADMIN_ID, file_id, caption=f"📞 شماره: {contact}\n👤 نام: {name}\n🎙 کاربر یک ویس ارسال کرد.")
+        else:
+            bot.send_message(ADMIN_ID, f"📞 شماره: {contact}\n👤 نام: {name}\n📌 مشکل: {message.text}")
 
-    
-    markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    markup.add(KeyboardButton("🔁 شروع مجدد"))
-    bot.send_message(chat_id, "برای شروع مجدد فرآیند، روی دکمه زیر کلیک کنید 👇", reply_markup=markup)
-    user_data.pop(chat_id, None)
-    
+        bot.send_message(user_id, "✅ اطلاعات شما با موفقیت ثبت شد. تیم حقوقی به‌زودی با شما تماس خواهد گرفت.")
 
-# Webhook route
-@app.route("/webhook", methods=['POST'])
+        # دکمه شروع مجدد
+        markup = ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.add(KeyboardButton("🔁 شروع مجدد"))
+        bot.send_message(user_id, "برای ارسال درخواست جدید، روی دکمه زیر بزنید:", reply_markup=markup)
+        user_state[user_id] = 'done'
+
+# هندلر شروع مجدد
+@bot.message_handler(func=lambda m: m.text == "🔁 شروع مجدد")
+def restart(message):
+    start(message)
+
+# ────────────── Flask Webhook ────────────── #
+@app.route('/webhook', methods=['POST'])
 def webhook():
-    if request.headers.get("content-type") == "application/json":
-        json_string = request.get_data().decode("utf-8")
+    if request.headers.get('content-type') == 'application/json':
+        json_string = request.get_data().decode('utf-8')
         update = telebot.types.Update.de_json(json_string)
         bot.process_new_updates([update])
         return '', 200
-    return '', 403
+    else:
+        return 'Invalid request', 403
 
 @app.route('/')
 def index():
-    return 'Bot is running!'
+    return 'ربات حقوقی فعال است ✅'
 
-if __name__ == '__main__':
+# تنظیم خودکار Webhook
+def set_webhook():
     bot.remove_webhook()
     bot.set_webhook(url=WEBHOOK_URL)
-    app.run(host="0.0.0.0", port=10000)
+
+if __name__ == '__main__':
+    set_webhook()
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
