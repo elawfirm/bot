@@ -75,16 +75,33 @@ def send_thanks(cid):
 ☎️ برای مشاوره فوری:
 09001003914""", reply_markup=markup)
 
-@bot.message_handler(func=lambda m: m.text == "🔁 شروع مجدد")
-def restart(message):
+# ریست روند با دستور /restart
+@bot.message_handler(commands=['restart'])
+def restart_command(message):
     cid = message.chat.id
     if cid in user_data:
         del user_data[cid]  # حذف کامل داده‌های قبلی
     user_data[cid] = {}  # ایجاد دیکشنری خالی جدید
-    bot.send_message(cid, "🔄 روند با موفقیت ریست شد! ⚖️ لطفاً از نو شروع کنید.", reply_markup=types.ReplyKeyboardRemove())
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     button = types.KeyboardButton("ارسال شماره تماس 📱", request_contact=True)
     markup.add(button)
+    bot.send_message(cid, "🔄 روند با موفقیت ریست شد! ⚖️ لطفاً از نو شروع کنید.", reply_markup=types.ReplyKeyboardRemove())
+    bot.send_message(cid, """سلام و وقت شما بخیر 👋 ⚖️
+
+ما در خدمت شما برای حل مسائل حقوقی هستیم 📜
+لطفاً شماره تماس خود را وارد کنید یا از دکمه زیر استفاده نمایید:""", reply_markup=markup)
+
+# پردازش دکمه شروع مجدد
+@bot.message_handler(func=lambda m: m.text == "🔁 شروع مجدد")
+def restart_button(message):
+    cid = message.chat.id
+    if cid in user_data:
+        del user_data[cid]  # حذف کامل داده‌های قبلی
+    user_data[cid] = {}  # ایجاد دیکشنری خالی جدید
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    button = types.KeyboardButton("ارسال شماره تماس 📱", request_contact=True)
+    markup.add(button)
+    bot.send_message(cid, "🔄 روند با موفقیت ریست شد! ⚖️ لطفاً از نو شروع کنید.", reply_markup=types.ReplyKeyboardRemove())
     bot.send_message(cid, """سلام و وقت شما بخیر 👋 ⚖️
 
 ما در خدمت شما برای حل مسائل حقوقی هستیم 📜
