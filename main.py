@@ -78,9 +78,11 @@ def send_thanks(cid):
 @bot.message_handler(func=lambda m: m.text == "🔁 شروع مجدد")
 def restart(message):
     cid = message.chat.id
-    user_data[cid] = {}  # ریست کامل داده‌های کاربر
-    bot.send_message(cid, "🔄 روند شروع مجدد شد! ⚖️ لطفاً از نو شروع کنید.", reply_markup=types.ReplyKeyboardRemove())
-    send_welcome(message)  # فراخوانی دوباره تابع شروع
+    if cid in user_data:
+        del user_data[cid]  # حذف کامل داده‌های کاربر
+    user_data[cid] = {}  # ایجاد دیکشنری خالی جدید
+    bot.send_message(cid, "🔄 روند با موفقیت ریست شد! ⚖️ لطفاً از نو شروع کنید.", reply_markup=types.ReplyKeyboardRemove())
+    send_welcome(message)  # شروع دوباره روند
 
 # پیکربندی webhook
 @app.route("/webhook", methods=["POST"])
