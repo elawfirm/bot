@@ -19,8 +19,9 @@ def send_welcome(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     button = types.KeyboardButton("ارسال شماره تماس 📱", request_contact=True)
     markup.add(button)
-    bot.send_message(cid, """سلام و وقت شما بخیر 👋
+    bot.send_message(cid, """سلام و وقت شما بخیر 👋 ⚖️
 
+ما در خدمت شما برای حل مسائل حقوقی هستیم 📜
 لطفاً شماره تماس خود را وارد کنید یا از دکمه زیر استفاده نمایید:""", reply_markup=markup)
 
 # دریافت شماره تماس
@@ -29,16 +30,16 @@ def get_contact(message):
     cid = message.chat.id
     phone = message.contact.phone_number
     user_data[cid]["phone"] = phone
-    bot.send_message(cid, """✅ شماره تماس با موفقیت ثبت شد.
+    bot.send_message(cid, """✅ شماره تماس با موفقیت ثبت شد ⚖️
 
-لطفاً نام و نام خانوادگی خود را وارد نمایید:""", reply_markup=types.ReplyKeyboardRemove())
+لطفاً نام و نام خانوادگی خود را وارد نمایید 📝""", reply_markup=types.ReplyKeyboardRemove())
 
 # دریافت نام و نام خانوادگی
 @bot.message_handler(func=lambda m: "phone" in user_data.get(m.chat.id, {}) and "name" not in user_data.get(m.chat.id, {}))
 def get_name(message):
     cid = message.chat.id
     user_data[cid]["name"] = message.text
-    bot.send_message(cid, "لطفاً مشکل حقوقی خود را به صورت *متنی* یا *ویس* ارسال نمایید:", parse_mode="Markdown")
+    bot.send_message(cid, "لطفاً مشکل حقوقی خود را به صورت *متنی* یا *ویس* ارسال نمایید 📜 🧑‍⚖️", parse_mode="Markdown")
 
 # دریافت ویس
 @bot.message_handler(content_types=['voice'])
@@ -67,9 +68,9 @@ def get_text(message):
 def send_thanks(cid):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add(types.KeyboardButton("🔁 شروع مجدد"))
-    bot.send_message(cid, """✅ اطلاعات شما با موفقیت ثبت شد.
+    bot.send_message(cid, """✅ اطلاعات شما با موفقیت ثبت شد ⚖️
 
-📞 کارشناسان ما در اسرع وقت با شما تماس می‌گیرند.
+📞 کارشناسان ما در اسرع وقت با شما تماس می‌گیرند 📞
 
 ☎️ برای مشاوره فوری:
 09001003914""", reply_markup=markup)
@@ -90,7 +91,7 @@ def webhook():
 
 @app.route("/")
 def index():
-    return "ربات حقوقی فعال است."
+    return "ربات حقوقی فعال است ⚖️"
 
 import telebot.apihelper
 bot.remove_webhook()
