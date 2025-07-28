@@ -79,10 +79,16 @@ def send_thanks(cid):
 def restart(message):
     cid = message.chat.id
     if cid in user_data:
-        del user_data[cid]  # حذف کامل داده‌های کاربر
+        del user_data[cid]  # حذف کامل داده‌های قبلی
     user_data[cid] = {}  # ایجاد دیکشنری خالی جدید
     bot.send_message(cid, "🔄 روند با موفقیت ریست شد! ⚖️ لطفاً از نو شروع کنید.", reply_markup=types.ReplyKeyboardRemove())
-    send_welcome(message)  # شروع دوباره روند
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    button = types.KeyboardButton("ارسال شماره تماس 📱", request_contact=True)
+    markup.add(button)
+    bot.send_message(cid, """سلام و وقت شما بخیر 👋 ⚖️
+
+ما در خدمت شما برای حل مسائل حقوقی هستیم 📜
+لطفاً شماره تماس خود را وارد کنید یا از دکمه زیر استفاده نمایید:""", reply_markup=markup)
 
 # پیکربندی webhook
 @app.route("/webhook", methods=["POST"])
