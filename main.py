@@ -1,80 +1,89 @@
 import telebot
-from telebot.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
-import os
+from telebot import types
 from flask import Flask, request
 
-TOKEN = "8010785406:AAGU3XARPR_GzihDYS8T624bPTEU8ildmQ8"
+API_TOKEN = '8010785406:AAGU3XARPR_GzihDYS8T624bPTEU8ildmQ8'
 ADMIN_ID = 7549512366
-WEBHOOK_URL = "https://bot-ltl5.onrender.com"
 
-bot = telebot.TeleBot(TOKEN)
+bot = telebot.TeleBot(API_TOKEN)
 app = Flask(__name__)
 
 user_data = {}
 
-def get_main_menu():
-    markup = ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add(KeyboardButton("🔁 شروع مجدد"))
-    return markup
-
+# مرحله اول: دریافت شماره تماس
 @bot.message_handler(commands=['start'])
-def start_handler(message):
-    chat_id = message.chat.id
-    user_data[chat_id] = {}
-    markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    markup.add(KeyboardButton("📞 ارسال شماره تماس", request_contact=True))
-    bot.send_message(chat_id, "لطفاً شماره تماس خود را وارد نمایید یا از دکمه زیر استفاده کنید:", reply_markup=markup)
+def start(message):
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    button = types.KeyboardButton("📞 ارسال شماره تماس", request_contact=True)
+    markup.add(button)
+    bot.send_message(message.chat.id, "لطفاً شماره تماس خود را وارد نمایید یا از دکمه زیر استفاده کنید:", reply_markup=markup)
+    user_data[message.chat.id] = {'step': 'phone'}
 
 @bot.message_handler(content_types=['contact'])
-def handle_contact(message):
+def get_contact(message):
     chat_id = message.chat.id
-    user_data[chat_id]['phone'] = message.contact.phone_number
-    bot.send_message(chat_id, "لطفاً نام و نام خانوادگی خود را وارد نمایید:", reply_markup=ReplyKeyboardRemove())
+    if chat_id in user_data and user_data[chat_id]['step'] == 'phone':
+        user_data[chat_id]['phone'] = message.contact.phone_number
+        user_data[chat_id]['step'] = 'name'
+        bot.send_message(chat_id, "لطفاً نام و نام خانوادگی خود را وارد نمایید:", reply_markup=types.ReplyKeyboardRemove())
 
-@bot.message_handler(func=lambda m: 'phone' in user_data.get(m.chat.id, {}) and 'name' not in user_data[m.chat.id], content_types=['text'])
-def handle_name(message):
+@bot.message_handler(func=lambda m: m.chat.id in user_data and user_data[m.chat.id]['step'] == 'name')
+def get_name(message):
     chat_id = message.chat.id
     user_data[chat_id]['name'] = message.text
-    bot.send_message(chat_id, "✅ لطفاً مشکل خود را به صورت متن یا ویس ارسال نمایید.")
+    user_data[chat_id]['step'] = 'problem'
+    markup = types.ReplyKeyboardRemove()
+    bot.send_message(chat_id, "لطفاً مشکل خود را به‌صورت *متن یا ویس* ارسال نمایید:", parse_mode='Markdown', reply_markup=markup)
 
-@bot.message_handler(content_types=['text', 'voice'])
-def handle_problem(message):
+@bot.message_handler(content_types=['voice'])
+def get_voice(message):
     chat_id = message.chat.id
-    data = user_data.get(chat_id, {})
+    if chat_id in user_data and user_data[chat_id]['step'] == 'problem':
+        voice = message.voice.file_id
+        user_data[chat_id]['step'] = 'done'
+        caption = f"📞 تماس: {user_data[chat_id].get('phone')}
+👤 نام: {user_data[chat_id].get('name')}"
+        bot.send_voice(ADMIN_ID, voice, caption=caption)
+        send_done_message(chat_id)
 
-    if 'phone' in data and 'name' in data:
-        if message.content_type == 'voice':
-            file_info = bot.get_file(message.voice.file_id)
-            downloaded_file = bot.download_file(file_info.file_path)
-            voice_path = f"/tmp/{message.voice.file_id}.ogg"
-            with open(voice_path, 'wb') as f:
-                f.write(downloaded_file)
-            with open(voice_path, 'rb') as f:
-                bot.send_voice(ADMIN_ID, f, caption=f"📥 تماس: {data['phone']}
-👤 نام: {data['name']}")
-        else:
-            bot.send_message(ADMIN_ID, f"📥 تماس: {data['phone']}
-👤 نام: {data['name']}
+@bot.message_handler(func=lambda m: m.chat.id in user_data and user_data[m.chat.id]['step'] == 'problem')
+def get_problem_text(message):
+    chat_id = message.chat.id
+    user_data[chat_id]['step'] = 'done'
+    text = f"📞 تماس: {user_data[chat_id].get('phone')}
+👤 نام: {user_data[chat_id].get('name')}
 📝 مشکل:
-{message.text}")
+{message.text}"
+    bot.send_message(ADMIN_ID, text)
+    send_done_message(chat_id)
 
-        bot.send_message(chat_id, "✅ اطلاعات شما با موفقیت ثبت شد.
-کارشناسان ما در اسرع وقت با شما تماس خواهند گرفت.
+def send_done_message(chat_id):
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add(types.KeyboardButton("🔁 شروع مجدد"))
+    bot.send_message(chat_id,
+        "✅ اطلاعات شما با موفقیت ثبت شد.
+"
+        "کارشناسان ما در اسرع وقت با شما تماس خواهند گرفت.
 
-☎️ برای مشاوره فوری:
-09001003914", reply_markup=get_main_menu())
-        user_data.pop(chat_id, None)
-    elif message.text == "🔁 شروع مجدد":
-        start_handler(message)
+"
+        "☎️ برای مشاوره فوری:
+"
+        "09001003914",
+        reply_markup=markup
+    )
 
-@app.route('/', methods=['GET', 'POST'])
+@bot.message_handler(func=lambda m: m.text == "🔁 شروع مجدد")
+def restart(message):
+    start(message)
+
+@app.route('/', methods=['POST'])
 def webhook():
-    if request.method == 'POST':
-        bot.process_new_updates([telebot.types.Update.de_json(request.stream.read().decode("utf-8"))])
-        return '', 200
-    return 'ok', 200
+    bot.process_new_updates([telebot.types.Update.de_json(request.stream.read().decode("utf-8"))])
+    return 'OK'
 
-if __name__ == "__main__":
-    bot.remove_webhook()
-    bot.set_webhook(url=f"{WEBHOOK_URL}/")
-    app.run(host="0.0.0.0", port=int(os.environ.get('PORT', 10000)))
+@app.route('/', methods=['GET'])
+def index():
+    return 'Bot is running.'
+
+bot.remove_webhook()
+bot.set_webhook(url='https://bot-ltl5.onrender.com/')
