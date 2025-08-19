@@ -17,7 +17,7 @@ def send_welcome(message):
     markup = telebot.types.InlineKeyboardMarkup()
     markup.add(telebot.types.InlineKeyboardButton("⚖️ مشاوره حقوقی تخصصی", callback_data="legal"),
                telebot.types.InlineKeyboardButton("🔒 مشاوره کیفری", callback_data="criminal"))
-    bot.send_message(cid, "⚖️ *خوش آمدید به elawfirm!* 📜\nما با تخصص بالا در کنار شما هستیم.\nلطفاً نوع مشاوره را انتخاب کنید:", parse_mode="Markdown", reply_markup=markup)
+    bot.send_message(cid, "⚖️ *خوش آمدید به elawfirm!* 📜\nبا تکیه بر دانش حقوقی عمیق، راه‌حل‌های دقیق ارائه می‌دهیم.\nلطفاً حوزه موردنظر را انتخاب کنید:", parse_mode="Markdown", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data in ["legal", "criminal"])
 def process_consultation_type(call):
@@ -52,23 +52,40 @@ def handle_name(message):
     user_data[cid]["name"] = message.text.strip()
     user_data[cid]["step"] = "details"
     if user_data[cid]["type"] == "legal":
-        send_legal_questions(cid)
+        send_legal_subareas(cid)
     else:
         send_criminal_questions(cid)
 
-def send_legal_questions(cid):
+# حوزه‌های تخصصی حقوقی
+def send_legal_subareas(cid):
     markup = telebot.types.InlineKeyboardMarkup()
-    markup.add(telebot.types.InlineKeyboardButton("🏛️ قراردادهای تجاری", callback_data="legal_contract"),
-               telebot.types.InlineKeyboardButton("⚖️ دعاوی ملکی پیشرفته", callback_data="legal_property"))
-    bot.send_message(cid, "🏛️ *مشاوره حقوقی تخصصی:* ⚖️\nلطفاً حوزه موردنظر را انتخاب کنید:", parse_mode="Markdown", reply_markup=markup)
+    markup.add(telebot.types.InlineKeyboardButton("🏠 اموال و مالکیت", callback_data="legal_property"),
+               telebot.types.InlineKeyboardButton("📝 تعهدات و قراردادها", callback_data="legal_contracts"))
+    markup.add(telebot.types.InlineKeyboardButton("👨‍👩‍👧 دعاوی خانواده", callback_data="legal_family"),
+               telebot.types.InlineKeyboardButton("🕰️ ارث و وصیت", callback_data="legal_inheritance"))
+    markup.add(telebot.types.InlineKeyboardButton("🏢 شرکت‌ها و اشخاص حقوقی", callback_data="legal_company"),
+               telebot.types.InlineKeyboardButton("🛡️ مسئولیت مدنی", callback_data="legal_civil_liability"))
+    bot.send_message(cid, "🏛️ *حوزه‌های تخصصی حقوقی:* ⚖️\nلطفاً حوزه موردنظر را انتخاب کنید تا مشاوره دقیق ارائه دهیم:", parse_mode="Markdown", reply_markup=markup)
 
-@bot.callback_query_handler(func=lambda call: call.data in ["legal_contract", "legal_property"])
+@bot.callback_query_handler(func=lambda call: call.data in ["legal_property", "legal_contracts", "legal_family", "legal_inheritance", "legal_company", "legal_civil_liability"])
 def process_legal_details(call):
     cid = call.message.chat.id
-    user_data[cid]["details"] = call.data.replace("legal_", "")
+    user_data[cid]["subarea"] = call.data.replace("legal_", "")
     bot.answer_callback_query(call.id)
-    bot.send_message(cid, "📝 لطفاً جزئیات دقیق (موضوع، مبلغ، طرفین، اسناد مرتبط) را وارد کنید:", parse_mode="Markdown")
+    if call.data == "legal_property":
+        bot.send_message(cid, "🏠 *اموال و مالکیت:* ⚖️\nلطفاً جزئیات (نام اموال، مالکیت مورد مناقشه، اسناد موجود، طرفین درگیر) را وارد کنید:")
+    elif call.data == "legal_contracts":
+        bot.send_message(cid, "📝 *تعهدات و قراردادها:* ⚖️\nلطفاً جزئیات (نوع قرارداد، تعهدات طرفین، مبلغ، تاریخ انعقاد، مشکلات حقوقی پیش‌آمده) را وارد کنید:")
+    elif call.data == "legal_family":
+        bot.send_message(cid, "👨‍👩‍👧 *دعاوی خانواده:* ⚖️\nلطفاً جزئیات (نوع دعوا مانند طلاق، حضانت، نفقه، طرفین، مدارک خانوادگی) را وارد کنید:")
+    elif call.data == "legal_inheritance":
+        bot.send_message(cid, "🕰️ *ارث و وصیت:* ⚖️\nلطفاً جزئیات (نام متوفی، وارثان، محتوای وصیت‌نامه، اموال مورد ارث، مشکلات تقسیم) را وارد کنید:")
+    elif call.data == "legal_company":
+        bot.send_message(cid, "🏢 *شرکت‌ها و اشخاص حقوقی:* ⚖️\nلطفاً جزئیات (نوع شرکت، سهامداران، قراردادهای شرکتی، دعاوی مرتبط، وضعیت ثبت) را وارد کنید:")
+    elif call.data == "legal_civil_liability":
+        bot.send_message(cid, "🛡️ *مسئولیت مدنی:* ⚖️\nلطفاً جزئیات (نوع مسئولیت، خسارت واردشده، طرفین، مدارک اثبات تقصیر) را وارد کنید:")
 
+# مشاوره کیفری
 def send_criminal_questions(cid):
     markup = telebot.types.InlineKeyboardMarkup()
     markup.add(telebot.types.InlineKeyboardButton("🔍 جرایم مالی", callback_data="criminal_finance"),
