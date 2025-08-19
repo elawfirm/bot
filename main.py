@@ -22,7 +22,7 @@ def send_welcome(message):
 @bot.callback_query_handler(func=lambda call: call.data in ["legal", "migration"])
 def process_consultation_type(call):
     cid = call.message.chat.id
-    print(f"Debug: Received callback data: {call.data}")  # دیباگ
+    print(f"Debug: Received callback data: {call.data} for chat {cid}")
     user_data[cid] = {"type": call.data, "step": "phone"}
     bot.answer_callback_query(call.id)
     markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
@@ -32,8 +32,17 @@ def process_consultation_type(call):
 @bot.message_handler(content_types=['contact'], func=lambda message: user_data.get(message.chat.id, {}).get("step") == "phone")
 def handle_contact(message):
     cid = message.chat.id
+    print(f"Debug: Received contact for chat {cid}, step: {user_data.get(cid, {}).get('step')}, phone: {message.contact.phone_number}")
     phone = message.contact.phone_number
     user_data[cid]["phone"] = phone
+    user_data[cid]["step"] = "name"
+    bot.send_message(cid, "✅ شماره شما ثبت شد! 📝 نام و نام خانوادگی خود را وارد کنید:", reply_markup=telebot.types.ReplyKeyboardRemove())
+
+@bot.message_handler(func=lambda message: user_data.get(message.chat.id, {}).get("step") == "phone" and message.content_type == "text")
+def handle_phone_text(message):
+    cid = message.chat.id
+    print(f"Debug: Received phone text for chat {cid}, phone: {message.text}")
+    user_data[cid]["phone"] = message.text.strip()
     user_data[cid]["step"] = "name"
     bot.send_message(cid, "✅ شماره شما ثبت شد! 📝 نام و نام خانوادگی خود را وارد کنید:", reply_markup=telebot.types.ReplyKeyboardRemove())
 
