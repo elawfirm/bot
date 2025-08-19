@@ -56,7 +56,6 @@ def handle_name(message):
     else:
         send_criminal_questions(cid)
 
-# حوزه‌های تخصصی حقوقی
 def send_legal_subareas(cid):
     markup = telebot.types.InlineKeyboardMarkup()
     markup.add(telebot.types.InlineKeyboardButton("🏠 اموال و مالکیت", callback_data="legal_property"),
@@ -65,11 +64,13 @@ def send_legal_subareas(cid):
                telebot.types.InlineKeyboardButton("🕰️ ارث و وصیت", callback_data="legal_inheritance"))
     markup.add(telebot.types.InlineKeyboardButton("🏢 شرکت‌ها و اشخاص حقوقی", callback_data="legal_company"),
                telebot.types.InlineKeyboardButton("🛡️ مسئولیت مدنی", callback_data="legal_civil_liability"))
+    print(f"Debug: Sending legal subareas to chat {cid}")
     bot.send_message(cid, "🏛️ *حوزه‌های تخصصی حقوقی:* ⚖️\nلطفاً حوزه موردنظر را انتخاب کنید تا مشاوره دقیق ارائه دهیم:", parse_mode="Markdown", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data in ["legal_property", "legal_contracts", "legal_family", "legal_inheritance", "legal_company", "legal_civil_liability"])
 def process_legal_details(call):
     cid = call.message.chat.id
+    print(f"Debug: Received legal callback data: {call.data} for chat {cid}")
     user_data[cid]["subarea"] = call.data.replace("legal_", "")
     bot.answer_callback_query(call.id)
     if call.data == "legal_property":
@@ -85,7 +86,6 @@ def process_legal_details(call):
     elif call.data == "legal_civil_liability":
         bot.send_message(cid, "🛡️ *مسئولیت مدنی:* ⚖️\nلطفاً جزئیات (نوع مسئولیت، خسارت واردشده، طرفین، مدارک اثبات تقصیر) را وارد کنید:")
 
-# مشاوره کیفری
 def send_criminal_questions(cid):
     markup = telebot.types.InlineKeyboardMarkup()
     markup.add(telebot.types.InlineKeyboardButton("🔍 جرایم مالی", callback_data="criminal_finance"),
@@ -95,6 +95,7 @@ def send_criminal_questions(cid):
 @bot.callback_query_handler(func=lambda call: call.data in ["criminal_finance", "criminal_violence"])
 def process_criminal_details(call):
     cid = call.message.chat.id
+    print(f"Debug: Received criminal callback data: {call.data} for chat {cid}")
     user_data[cid]["details"] = call.data.replace("criminal_", "")
     bot.answer_callback_query(call.id)
     bot.send_message(cid, "📝 لطفاً جزئیات (تاریخ، محل وقوع، افراد درگیر، مدارک) را وارد کنید:", parse_mode="Markdown")
