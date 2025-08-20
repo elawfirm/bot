@@ -2,13 +2,15 @@ import telebot
 from flask import Flask, request
 import logging
 
-# تنظیمات logging
+# -------------------------
+# تنظیمات Logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
+# -------------------------
 # تنظیمات ربات
 TOKEN = "8010785406:AAFPInJ3QQmyNti9KwDxj075iOmVUhZJ364"
 WEBHOOK_URL = "https://bot-ltl5.onrender.com"
@@ -17,6 +19,7 @@ ADMIN_ID = 7549512366
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
+# -------------------------
 # داده‌های کاربران
 user_data = {}
 
@@ -35,6 +38,7 @@ def main_keyboard():
     markup.add("📞 تماس با پشتیبانی", "ℹ️ درباره ما", "⚖️ درخواست مشاوره جدید")
     return markup
 
+# -------------------------
 # شروع ربات
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
@@ -49,6 +53,7 @@ def send_welcome(message):
 """
     bot.send_message(cid, welcome_text, parse_mode="Markdown", reply_markup=main_keyboard())
 
+# -------------------------
 # مدیریت پیام‌های متنی
 @bot.message_handler(func=lambda m: True)
 def handle_all_messages(message):
@@ -69,7 +74,6 @@ def handle_all_messages(message):
     elif text == "⚖️ درخواست مشاوره جدید":
         start_consultation_process(cid)
     else:
-        # مدیریت مراحل مشاوره
         if cid in user_data:
             state = user_data[cid].get('state')
             if state == USER_STATES['PHONE']:
@@ -81,6 +85,7 @@ def handle_all_messages(message):
         else:
             bot.send_message(cid, "لطفاً از منوی زیر گزینه‌ای انتخاب کنید:", reply_markup=main_keyboard())
 
+# -------------------------
 # شروع فرآیند مشاوره
 def start_consultation_process(cid):
     user_data[cid] = {'state': USER_STATES['PHONE']}
@@ -89,6 +94,7 @@ def start_consultation_process(cid):
     markup.add(button_phone)
     bot.send_message(cid, "📱 لطفاً شماره تماس خود را وارد کنید یا با دکمه زیر ارسال نمایید:", reply_markup=markup)
 
+# -------------------------
 # دریافت شماره تماس از دکمه
 @bot.message_handler(content_types=['contact'])
 def handle_contact(message):
@@ -106,6 +112,7 @@ def handle_phone_text(message):
     user_data[cid]["state"] = USER_STATES['NAME']
     bot.send_message(cid, "✅ شماره ثبت شد. لطفاً نام و نام خانوادگی خود را وارد کنید:", reply_markup=telebot.types.ReplyKeyboardRemove())
 
+# -------------------------
 # دریافت نام
 def handle_name(message):
     cid = message.chat.id
@@ -121,6 +128,7 @@ def handle_name(message):
         )
         bot.send_message(cid, f"✅ نام ثبت شد.\n\nلطفاً حوزه مشاوره را انتخاب کنید:", reply_markup=markup)
 
+# -------------------------
 # سوالات جزئی
 LEGAL_QUESTIONS = {
     "property": ["🏠 آیا ملک شما سند رسمی دارد؟", "📑 مشکل در اجاره‌نامه", "❌ سایر موارد"],
@@ -134,6 +142,7 @@ CRIMINAL_QUESTIONS = {
     "violence": ["👊 درگیری فیزیکی", "🔪 تهدید", "❌ سایر موارد"]
 }
 
+# -------------------------
 # مدیریت callback‌ها
 @bot.callback_query_handler(func=lambda c: True)
 def handle_callbacks(call):
@@ -159,16 +168,21 @@ def handle_callbacks(call):
         )
         bot.send_message(cid, "لطفاً موضوع دقیق‌تر را انتخاب کنید:", reply_markup=markup)
 
-    elif data.startswith("legal_") or data.startswith("criminal_"):
-        subarea = data.split("_")[1]
-        user_data[cid]["subarea"] = subarea
+    elif data.startswith("legal_"):
+        sub = data.replace("legal_", "")
+        user_data[cid]["subarea"] = sub
         user_data[cid]["state"] = USER_STATES['DETAILS']
-
-        if data.startswith("legal_"):
-            msg = LEGAL_QUESTIONS.get(subarea, "لطفاً جزئیات را وارد کنید:")
+        msg = LEGAL_QUESTIONS.get(sub, "لطفاً جزئیات را وارد کنید:")
+        if isinstance(msg, list):
+            send_option_question(cid, msg)
         else:
-            msg = CRIMINAL_QUESTIONS.get(subarea, "لطفاً جزئیات را وارد کنید:")
+            bot.send_message(cid, msg)
 
+    elif data.startswith("criminal_"):
+        sub = data.replace("criminal_", "")
+        user_data[cid]["subarea"] = sub
+        user_data[cid]["state"] = USER_STATES['DETAILS']
+        msg = CRIMINAL_QUESTIONS.get(sub, "لطفاً جزئیات را وارد کنید:")
         if isinstance(msg, list):
             send_option_question(cid, msg)
         else:
@@ -179,15 +193,19 @@ def handle_callbacks(call):
         user_data[cid]["details"] = answer
         user_data[cid]["state"] = USER_STATES['START']
         bot.send_message(cid, f"✅ پاسخ شما ثبت شد: {answer}", reply_markup=main_keyboard())
-        bot.send_message(ADMIN_ID, f"کاربر {user_data[cid].get('name','ناشناس')} شماره {user_data[cid].get('phone','---')}:\n{answer}")
+        name = user_data[cid].get("name", "ناشناس")
+        phone = user_data[cid].get("phone", "---")
+        bot.send_message(ADMIN_ID, f"کاربر {name} شماره {phone}:\n{answer}")
 
+# -------------------------
 # ارسال سوال گزینه‌ای
 def send_option_question(cid, options):
     markup = telebot.types.InlineKeyboardMarkup(row_width=1)
     for opt in options:
         markup.add(telebot.types.InlineKeyboardButton(opt, callback_data=f"details_{opt}"))
-    bot.send_message(cid, "لطفاً یکی از گزینه‌ها را انتخاب کنید یا متن خود را وارد نمایید:", reply_markup=markup)
+    bot.send_message(cid, "لطفاً گزینه مورد نظر را انتخاب کنید یا متن خود را وارد کنید:", reply_markup=markup)
 
+# -------------------------
 # دریافت جزئیات متنی
 def handle_details(message):
     cid = message.chat.id
@@ -197,5 +215,28 @@ def handle_details(message):
     details = message.text.strip()
     user_data[cid]["details"] = details
     user_data[cid]["state"] = USER_STATES['START']
+
     bot.send_message(cid, "✅ اطلاعات شما ثبت شد. به زودی با شما تماس خواهیم گرفت.", reply_markup=main_keyboard())
-    bot.send_message(ADMIN_ID, f"کاربر {user_data[cid].get('name','ناشناس')} شماره {user_data[c
+    name = user_data[cid].get("name", "ناشناس")
+    phone = user_data[cid].get("phone", "---")
+    bot.send_message(ADMIN_ID, f"کاربر {name} شماره {phone}:\n{details}")
+
+# -------------------------
+# Flask Webhook
+@app.route("/", methods=["GET", "POST"])
+def webhook():
+    if request.method == "POST":
+        json_str = request.get_data().decode("utf-8")
+        update = telebot.types.Update.de_json(json_str)
+        bot.process_new_updates([update])
+        return "", 200
+    else:
+        return "Bot is running", 200
+
+# حذف و تنظیم Webhook
+bot.remove_webhook()
+bot.set_webhook(url=WEBHOOK_URL)
+
+# اجرای Flask
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
