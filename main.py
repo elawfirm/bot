@@ -26,8 +26,7 @@ USER_STATES = {
     'PHONE': 1,
     'NAME': 2,
     'AREA': 3,
-    'SUBAREA': 4,
-    'DETAILS': 5
+    'DETAILS': 4
 }
 
 # کیبورد اصلی
@@ -87,20 +86,44 @@ def start_consultation_process(cid):
     )
     bot.send_message(cid, "لطفاً حوزه مشاوره را انتخاب کنید:", reply_markup=markup)
 
+# سوالات جزئی
+LEGAL_QUESTIONS = {
+    "property": ["🏠 آیا ملک شما سند رسمی دارد؟", "📑 مشکل در اجاره‌نامه", "❌ سایر موارد"],
+    "contracts": "📝 لطفاً جزئیات قرارداد خود را بنویسید:",
+    "family": ["💍 طلاق توافقی", "👶 حضانت فرزند", "❌ سایر موارد"],
+    "inheritance": "🕰️ جزئیات ارث و وصیت را وارد کنید:"
+}
+
+CRIMINAL_QUESTIONS = {
+    "finance": ["💸 کلاهبرداری", "🏦 اختلاس", "❌ سایر موارد"],
+    "violence": ["👊 درگیری فیزیکی", "🔪 تهدید", "❌ سایر موارد"]
+}
+
 # مدیریت callback‌ها
 @bot.callback_query_handler(func=lambda c: True)
 def handle_callbacks(call):
     cid = call.message.chat.id
     data = call.data
     bot.answer_callback_query(call.id)
-    
-    if data.startswith("area_"):
-        area = data.split("_")[1]
-        user_data[cid] = {"state": USER_STATES['PHONE'], "type": area}
-        markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-        markup.add(telebot.types.KeyboardButton("📱 ارسال شماره تماس", request_contact=True))
-        bot.send_message(cid, "📞 شماره تماس خود را وارد کنید یا دکمه زیر را بزنید:", reply_markup=markup)
-    
+
+    if data == "area_legal":
+        markup = telebot.types.InlineKeyboardMarkup(row_width=2)
+        markup.add(
+            telebot.types.InlineKeyboardButton("🏠 املاک", callback_data="legal_property"),
+            telebot.types.InlineKeyboardButton("📝 قراردادها", callback_data="legal_contracts"),
+            telebot.types.InlineKeyboardButton("👨‍👩‍👧 خانواده", callback_data="legal_family"),
+            telebot.types.InlineKeyboardButton("🕰️ ارث و وصیت", callback_data="legal_inheritance"),
+        )
+        bot.send_message(cid, "لطفاً موضوع دقیق‌تر را انتخاب کنید:", reply_markup=markup)
+
+    elif data == "area_criminal":
+        markup = telebot.types.InlineKeyboardMarkup(row_width=2)
+        markup.add(
+            telebot.types.InlineKeyboardButton("💰 جرائم مالی", callback_data="criminal_finance"),
+            telebot.types.InlineKeyboardButton("🚨 خشونت", callback_data="criminal_violence"),
+        )
+        bot.send_message(cid, "لطفاً موضوع دقیق‌تر را انتخاب کنید:", reply_markup=markup)
+
     elif data.startswith("legal_"):
         sub = data.replace("legal_", "")
         user_data[cid]["subarea"] = sub
@@ -121,18 +144,11 @@ def handle_callbacks(call):
         else:
             bot.send_message(cid, msg)
 
-# دیکشنری سوالات حقوقی و کیفری (ترکیبی از گزینه‌ای و متنی)
-LEGAL_QUESTIONS = {
-    "property": ["🏠 آیا ملک شما سند رسمی دارد؟", "❌ دیگر گزینه‌ها"],
-    "contracts": "📝 لطفاً جزئیات قرارداد خود را بنویسید:",
-    "family": ["👨‍👩‍👧 نوع پرونده خانواده؟", "❌ دیگر گزینه‌ها"],
-    "inheritance": "🕰️ جزئیات ارث و وصیت را وارد کنید:"
-}
-
-CRIMINAL_QUESTIONS = {
-    "finance": ["🔍 نوع جرم مالی؟", "❌ دیگر گزینه‌ها"],
-    "violence": ["🚨 نوع جرم خشونت‌آمیز؟", "❌ دیگر گزینه‌ها"]
-}
+    elif data.startswith("details_"):
+        answer = data.replace("details_", "")
+        user_data[cid]["details"] = answer
+        bot.send_message(cid, f"✅ پاسخ شما ثبت شد: {answer}", reply_markup=main_keyboard())
+        bot.send_message(ADMIN_ID, f"کاربر {user_data[cid].get('name','ناشناس')} شماره {user_data[cid].get('phone','---')}:\n{answer}")
 
 # ارسال سوال گزینه‌ای
 def send_option_question(cid, options):
@@ -172,8 +188,7 @@ def handle_details(message):
     details = message.text.strip()
     user_data[cid]["details"] = details
     bot.send_message(cid, "✅ اطلاعات شما ثبت شد. به زودی با شما تماس خواهیم گرفت.", reply_markup=main_keyboard())
-    # ارسال به ادمین
-    bot.send_message(ADMIN_ID, f"کاربر {user_data[cid]['name']} شماره {user_data[cid]['phone']}:\n{details}")
+    bot.send_message(ADMIN_ID, f"کاربر {user_data[cid].get('name','ناشناس')} شماره {user_data[cid].get('phone','---')}:\n{details}")
 
 # Flask webhook
 @app.route('/', methods=['POST'])
