@@ -9,10 +9,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# تنظیمات ربات (توکن و ادمین مستقیم)
+# تنظیمات ربات
 TOKEN = "8010785406:AAFPInJ3QQmyNti9KwDxj075iOmVUhZJ364"
-ADMIN_ID = 7549512366
 WEBHOOK_URL = "https://bot-ltl5.onrender.com"
+ADMIN_ID = 7549512366
 
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
@@ -27,8 +27,7 @@ USER_STATES = {
     'NAME': 2,
     'AREA': 3,
     'SUBAREA': 4,
-    'DETAILS': 5,
-    'DONE': 6
+    'DETAILS': 5
 }
 
 # کیبورد اصلی
@@ -36,12 +35,6 @@ def main_keyboard():
     markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add("📞 تماس با پشتیبانی", "ℹ️ درباره ما", "⚖️ درخواست مشاوره جدید")
     return markup
-
-# اعتبارسنجی شماره تلفن ایرانی
-import re
-def validate_iranian_phone_number(phone):
-    pattern = r'^(\+98|0)?9\d{9}$'
-    return re.match(pattern, phone) is not None
 
 # شروع ربات
 @bot.message_handler(commands=['start'])
@@ -89,8 +82,8 @@ def start_consultation_process(cid):
     user_data[cid] = {'state': USER_STATES['AREA']}
     markup = telebot.types.InlineKeyboardMarkup(row_width=2)
     markup.add(
-        telebot.types.InlineKeyboardButton("⚖️ حقوقی", callback_data="legal"),
-        telebot.types.InlineKeyboardButton("🔒 کیفری", callback_data="criminal")
+        telebot.types.InlineKeyboardButton("⚖️ حقوقی", callback_data="area_legal"),
+        telebot.types.InlineKeyboardButton("🔒 کیفری", callback_data="area_criminal")
     )
     bot.send_message(cid, "لطفاً حوزه مشاوره را انتخاب کنید:", reply_markup=markup)
 
@@ -99,18 +92,54 @@ def start_consultation_process(cid):
 def handle_callbacks(call):
     cid = call.message.chat.id
     data = call.data
+    bot.answer_callback_query(call.id)
     
-    if data in ["legal", "criminal"]:
-        user_data[cid] = {"type": data, "state": USER_STATES['PHONE']}
-        bot.answer_callback_query(call.id)
+    if data.startswith("area_"):
+        area = data.split("_")[1]
+        user_data[cid] = {"state": USER_STATES['PHONE'], "type": area}
         markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
         markup.add(telebot.types.KeyboardButton("📱 ارسال شماره تماس", request_contact=True))
         bot.send_message(cid, "📞 شماره تماس خود را وارد کنید یا دکمه زیر را بزنید:", reply_markup=markup)
     
     elif data.startswith("legal_"):
-        process_legal_details(call)
+        sub = data.replace("legal_", "")
+        user_data[cid]["subarea"] = sub
+        user_data[cid]["state"] = USER_STATES['DETAILS']
+        msg = LEGAL_QUESTIONS.get(sub, "لطفاً جزئیات را وارد کنید:")
+        if isinstance(msg, list):
+            send_option_question(cid, msg)
+        else:
+            bot.send_message(cid, msg)
+
     elif data.startswith("criminal_"):
-        process_criminal_details(call)
+        sub = data.replace("criminal_", "")
+        user_data[cid]["subarea"] = sub
+        user_data[cid]["state"] = USER_STATES['DETAILS']
+        msg = CRIMINAL_QUESTIONS.get(sub, "لطفاً جزئیات را وارد کنید:")
+        if isinstance(msg, list):
+            send_option_question(cid, msg)
+        else:
+            bot.send_message(cid, msg)
+
+# دیکشنری سوالات حقوقی و کیفری (ترکیبی از گزینه‌ای و متنی)
+LEGAL_QUESTIONS = {
+    "property": ["🏠 آیا ملک شما سند رسمی دارد؟", "❌ دیگر گزینه‌ها"],
+    "contracts": "📝 لطفاً جزئیات قرارداد خود را بنویسید:",
+    "family": ["👨‍👩‍👧 نوع پرونده خانواده؟", "❌ دیگر گزینه‌ها"],
+    "inheritance": "🕰️ جزئیات ارث و وصیت را وارد کنید:"
+}
+
+CRIMINAL_QUESTIONS = {
+    "finance": ["🔍 نوع جرم مالی؟", "❌ دیگر گزینه‌ها"],
+    "violence": ["🚨 نوع جرم خشونت‌آمیز؟", "❌ دیگر گزینه‌ها"]
+}
+
+# ارسال سوال گزینه‌ای
+def send_option_question(cid, options):
+    markup = telebot.types.InlineKeyboardMarkup(row_width=1)
+    for opt in options:
+        markup.add(telebot.types.InlineKeyboardButton(opt, callback_data=f"details_{opt}"))
+    bot.send_message(cid, "لطفاً گزینه مورد نظر را انتخاب کنید یا متن خود را وارد کنید:", reply_markup=markup)
 
 # دریافت شماره تماس از دکمه
 @bot.message_handler(content_types=['contact'])
@@ -125,129 +154,38 @@ def handle_contact(message):
 def handle_phone_text(message):
     cid = message.chat.id
     phone = message.text.strip()
-    if validate_iranian_phone_number(phone):
-        user_data[cid]["phone"] = phone
-        user_data[cid]["state"] = USER_STATES['NAME']
-        bot.send_message(cid, "✅ شماره ثبت شد. لطفاً نام و نام خانوادگی را وارد کنید:", reply_markup=telebot.types.ReplyKeyboardRemove())
-    else:
-        bot.send_message(cid, "❌ شماره معتبر نیست. لطفاً دوباره وارد کنید:")
+    user_data[cid]["phone"] = phone
+    user_data[cid]["state"] = USER_STATES['NAME']
+    bot.send_message(cid, "✅ شماره ثبت شد. لطفاً نام و نام خانوادگی را وارد کنید:", reply_markup=telebot.types.ReplyKeyboardRemove())
 
 # دریافت نام
 def handle_name(message):
     cid = message.chat.id
     name = message.text.strip()
-    if len(name) < 3:
-        bot.send_message(cid, "❌ نام کوتاه است. لطفاً نام کامل را وارد کنید:")
-        return
     user_data[cid]["name"] = name
-    user_data[cid]["state"] = USER_STATES['SUBAREA']
-    if user_data[cid]["type"] == "legal":
-        send_legal_subareas(cid)
-    else:
-        send_criminal_questions(cid)
-
-# ارسال زیرشاخه‌های حقوقی (گزینه‌ای)
-def send_legal_subareas(cid):
-    markup = telebot.types.InlineKeyboardMarkup(row_width=2)
-    markup.add(
-        telebot.types.InlineKeyboardButton("🏠 اموال", callback_data="legal_property"),
-        telebot.types.InlineKeyboardButton("📝 قراردادها", callback_data="legal_contracts")
-    )
-    markup.add(
-        telebot.types.InlineKeyboardButton("👨‍👩‍👧 خانواده", callback_data="legal_family"),
-        telebot.types.InlineKeyboardButton("🕰️ ارث", callback_data="legal_inheritance")
-    )
-    bot.send_message(cid, "🏛️ *زیرشاخه حقوقی:* لطفاً انتخاب کنید:", parse_mode="Markdown", reply_markup=markup)
-
-# پردازش جزئیات حقوقی (ترکیبی گزینه‌ای و متنی)
-def process_legal_details(call):
-    cid = call.message.chat.id
-    subarea = call.data.replace("legal_", "")
-    user_data[cid]["subarea"] = subarea
     user_data[cid]["state"] = USER_STATES['DETAILS']
-    bot.answer_callback_query(call.id)
-    
-    # مثال سوالات ترکیبی
-    if subarea == "property":
-        markup = telebot.types.InlineKeyboardMarkup(row_width=2)
-        markup.add(
-            telebot.types.InlineKeyboardButton("🏠 خرید ملک", callback_data="prop_buy"),
-            telebot.types.InlineKeyboardButton("🔑 اجاره", callback_data="prop_rent"),
-            telebot.types.InlineKeyboardButton("✅ پایان", callback_data="prop_done")
-        )
-        bot.send_message(cid, "🏠 لطفاً نوع معامله ملکی را انتخاب کنید:", reply_markup=markup)
-    elif subarea == "contracts":
-        bot.send_message(cid, "📝 لطفاً جزئیات قرارداد را بنویسید:", parse_mode="Markdown")
-    elif subarea == "family":
-        markup = telebot.types.InlineKeyboardMarkup(row_width=2)
-        markup.add(
-            telebot.types.InlineKeyboardButton("👨‍👩‍👧 طلاق", callback_data="fam_divorce"),
-            telebot.types.InlineKeyboardButton("🍼 حضانت", callback_data="fam_custody"),
-            telebot.types.InlineKeyboardButton("✅ پایان", callback_data="fam_done")
-        )
-        bot.send_message(cid, "👨‍👩‍👧 موضوع خانواده را انتخاب کنید:", reply_markup=markup)
-    elif subarea == "inheritance":
-        bot.send_message(cid, "🕰️ لطفاً جزئیات ارث و وصیت را بنویسید:", parse_mode="Markdown")
+    bot.send_message(cid, "✅ نام ثبت شد. لطفاً جزئیات مشکل خود را وارد کنید یا از گزینه‌ها انتخاب کنید:", reply_markup=telebot.types.ReplyKeyboardRemove())
 
-# ارسال سوالات کیفری (ترکیبی)
-def send_criminal_questions(cid):
-    markup = telebot.types.InlineKeyboardMarkup(row_width=2)
-    markup.add(
-        telebot.types.InlineKeyboardButton("🔍 جرایم مالی", callback_data="criminal_finance"),
-        telebot.types.InlineKeyboardButton("🚨 جرایم خشونت‌آمیز", callback_data="criminal_violence")
-    )
-    bot.send_message(cid, "🔒 *نوع جرم را انتخاب کنید:*", parse_mode="Markdown", reply_markup=markup)
-
-# پردازش جزئیات کیفری
-def process_criminal_details(call):
-    cid = call.message.chat.id
-    crime_type = call.data.replace("criminal_", "")
-    user_data[cid]["crime_type"] = crime_type
-    user_data[cid]["state"] = USER_STATES['DETAILS']
-    bot.answer_callback_query(call.id)
-    
-    # ترکیب گزینه و متن
-    if crime_type == "finance":
-        markup = telebot.types.InlineKeyboardMarkup(row_width=2)
-        markup.add(
-            telebot.types.InlineKeyboardButton("💰 اختلاس", callback_data="fin_embezzlement"),
-            telebot.types.InlineKeyboardButton("💳 کلاهبرداری", callback_data="fin_fraud"),
-            telebot.types.InlineKeyboardButton("✅ پایان", callback_data="fin_done")
-        )
-        bot.send_message(cid, "🔍 نوع جرم مالی را انتخاب کنید:", reply_markup=markup)
-    elif crime_type == "violence":
-        bot.send_message(cid, "🚨 لطفاً جزئیات جرم خشونت‌آمیز را توضیح دهید:", parse_mode="Markdown")
-
-# دریافت جزئیات متنی و پایان مشاوره
-@bot.message_handler(func=lambda m: True)
+# دریافت جزئیات
 def handle_details(message):
     cid = message.chat.id
-    if cid in user_data and user_data[cid]["state"] == USER_STATES['DETAILS']:
-        text = message.text
-        user_data[cid]["details"] = text
-        bot.send_message(cid, "✅ اطلاعات شما ثبت شد. مشاوره تکمیل شد.", reply_markup=main_keyboard())
-        # ارسال اطلاعات به ادمین
-        info = f"""
-📝 *اطلاعات کاربر:*
-نام: {user_data[cid].get('name','')}
-شماره: {user_data[cid].get('phone','')}
-حوزه: {user_data[cid].get('type','')}
-زیرشاخه: {user_data[cid].get('subarea','')}
-جرم/موضوع: {user_data[cid].get('crime_type','')}
-جزئیات: {user_data[cid].get('details','')}
-"""
-        bot.send_message(ADMIN_ID, info, parse_mode="Markdown")
-        user_data[cid]["state"] = USER_STATES['DONE']
+    details = message.text.strip()
+    user_data[cid]["details"] = details
+    bot.send_message(cid, "✅ اطلاعات شما ثبت شد. به زودی با شما تماس خواهیم گرفت.", reply_markup=main_keyboard())
+    # ارسال به ادمین
+    bot.send_message(ADMIN_ID, f"کاربر {user_data[cid]['name']} شماره {user_data[cid]['phone']}:\n{details}")
 
-# Webhook
+# Flask webhook
 @app.route('/', methods=['POST'])
 def webhook():
     json_str = request.get_data().decode('utf-8')
     update = telebot.types.Update.de_json(json_str)
     bot.process_new_updates([update])
-    return "ok", 200
+    return '!', 200
+
+# تنظیم Webhook
+bot.remove_webhook()
+bot.set_webhook(url=WEBHOOK_URL)
 
 if __name__ == "__main__":
-    bot.remove_webhook()
-    bot.set_webhook(url=WEBHOOK_URL)
     app.run(host="0.0.0.0", port=5000)
