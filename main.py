@@ -78,13 +78,45 @@ def handle_all_messages(message):
 
 # شروع فرآیند مشاوره
 def start_consultation_process(cid):
-    user_data[cid] = {'state': USER_STATES['AREA']}
-    markup = telebot.types.InlineKeyboardMarkup(row_width=2)
-    markup.add(
-        telebot.types.InlineKeyboardButton("⚖️ حقوقی", callback_data="area_legal"),
-        telebot.types.InlineKeyboardButton("🔒 کیفری", callback_data="area_criminal")
-    )
-    bot.send_message(cid, "لطفاً حوزه مشاوره را انتخاب کنید:", reply_markup=markup)
+    # شروع از مرحله شماره تماس
+    user_data[cid] = {'state': USER_STATES['PHONE']}
+    markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    button_phone = telebot.types.KeyboardButton("📱 ارسال شماره تماس", request_contact=True)
+    markup.add(button_phone)
+    bot.send_message(cid, "📱 لطفاً شماره تماس خود را وارد کنید یا با دکمه زیر ارسال نمایید:", reply_markup=markup)
+
+# دریافت شماره تماس از دکمه
+@bot.message_handler(content_types=['contact'])
+def handle_contact(message):
+    cid = message.chat.id
+    if cid in user_data and user_data[cid].get('state') == USER_STATES['PHONE']:
+        user_data[cid]["phone"] = message.contact.phone_number
+        user_data[cid]["state"] = USER_STATES['NAME']
+        bot.send_message(cid, "✅ شماره ثبت شد. لطفاً نام و نام خانوادگی خود را وارد کنید:", reply_markup=telebot.types.ReplyKeyboardRemove())
+
+# دریافت شماره تماس متنی
+def handle_phone_text(message):
+    cid = message.chat.id
+    phone = message.text.strip()
+    user_data[cid]["phone"] = phone
+    user_data[cid]["state"] = USER_STATES['NAME']
+    bot.send_message(cid, "✅ شماره ثبت شد. لطفاً نام و نام خانوادگی خود را وارد کنید:", reply_markup=telebot.types.ReplyKeyboardRemove())
+
+# دریافت نام
+def handle_name(message):
+    cid = message.chat.id
+    if cid in user_data and user_data[cid].get('state') == USER_STATES['NAME']:
+        name = message.text.strip()
+        user_data[cid]["name"] = name
+        user_data[cid]["state"] = USER_STATES['AREA']
+
+        # حالا می‌ره سراغ انتخاب حوزه
+        markup = telebot.types.InlineKeyboardMarkup(row_width=2)
+        markup.add(
+            telebot.types.InlineKeyboardButton("⚖️ حقوقی", callback_data="area_legal"),
+            telebot.types.InlineKeyboardButton("🔒 کیفری", callback_data="area_criminal")
+        )
+        bot.send_message(cid, f"✅ نام ثبت شد.\n\nلطفاً حوزه مشاوره را انتخاب کنید:", reply_markup=markup)
 
 # سوالات جزئی
 LEGAL_QUESTIONS = {
@@ -156,31 +188,6 @@ def send_option_question(cid, options):
     for opt in options:
         markup.add(telebot.types.InlineKeyboardButton(opt, callback_data=f"details_{opt}"))
     bot.send_message(cid, "لطفاً گزینه مورد نظر را انتخاب کنید یا متن خود را وارد کنید:", reply_markup=markup)
-
-# دریافت شماره تماس از دکمه
-@bot.message_handler(content_types=['contact'])
-def handle_contact(message):
-    cid = message.chat.id
-    if cid in user_data and user_data[cid].get('state') == USER_STATES['PHONE']:
-        user_data[cid]["phone"] = message.contact.phone_number
-        user_data[cid]["state"] = USER_STATES['NAME']
-        bot.send_message(cid, "✅ شماره ثبت شد. لطفاً نام و نام خانوادگی را وارد کنید:", reply_markup=telebot.types.ReplyKeyboardRemove())
-
-# دریافت شماره تماس متنی
-def handle_phone_text(message):
-    cid = message.chat.id
-    phone = message.text.strip()
-    user_data[cid]["phone"] = phone
-    user_data[cid]["state"] = USER_STATES['NAME']
-    bot.send_message(cid, "✅ شماره ثبت شد. لطفاً نام و نام خانوادگی را وارد کنید:", reply_markup=telebot.types.ReplyKeyboardRemove())
-
-# دریافت نام
-def handle_name(message):
-    cid = message.chat.id
-    name = message.text.strip()
-    user_data[cid]["name"] = name
-    user_data[cid]["state"] = USER_STATES['DETAILS']
-    bot.send_message(cid, "✅ نام ثبت شد. لطفاً جزئیات مشکل خود را وارد کنید یا از گزینه‌ها انتخاب کنید:", reply_markup=telebot.types.ReplyKeyboardRemove())
 
 # دریافت جزئیات
 def handle_details(message):
