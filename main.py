@@ -1,6 +1,5 @@
 import telebot
 from flask import Flask, request
-import re
 import logging
 
 # تنظیمات logging
@@ -10,17 +9,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ======= تنظیمات ربات =======
+# تنظیمات ربات
 TOKEN = "8010785406:AAFPInJ3QQmyNti9KwDxj075iOmVUhZJ364"
 ADMIN_ID = 7549512366
 WEBHOOK_URL = "https://bot-ltl5.onrender.com"
 
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
-
-# پاک کردن webhook قبلی و ست کردن webhook جدید
-bot.remove_webhook()
-bot.set_webhook(url=WEBHOOK_URL)
 
 # داده‌های کاربران
 user_data = {}
@@ -30,8 +25,9 @@ USER_STATES = {
     'START': 0,
     'PHONE': 1,
     'NAME': 2,
-    'DETAILS': 3,
-    'SUBAREA': 4
+    'SUBAREA': 3,
+    'DETAILS': 4,
+    'CONFIRM': 5
 }
 
 # کیبورد اصلی
@@ -42,6 +38,7 @@ def main_keyboard():
 
 # اعتبارسنجی شماره تلفن ایرانی
 def validate_iranian_phone_number(phone):
+    import re
     pattern = r'^(\+98|0)?9\d{9}$'
     return re.match(pattern, phone) is not None
 
@@ -82,7 +79,9 @@ def handle_all_messages(message):
             elif state == USER_STATES['NAME']:
                 handle_name(message)
             elif state == USER_STATES['DETAILS']:
-                handle_details(message)
+                handle_details_text(message)
+            elif state == USER_STATES['CONFIRM']:
+                handle_confirmation(message)
         else:
             bot.send_message(cid, "لطفاً از منوی زیر گزینه‌ای انتخاب کنید:", reply_markup=main_keyboard())
 
@@ -110,9 +109,9 @@ def handle_callbacks(call):
         bot.send_message(cid, "📞 شماره تماس خود را وارد کنید یا دکمه زیر را بزنید:", reply_markup=markup)
     
     elif data.startswith("legal_"):
-        process_legal_details(call)
+        process_legal_subarea(call)
     elif data.startswith("criminal_"):
-        process_criminal_details(call)
+        process_criminal_subarea(call)
 
 # دریافت شماره تماس از دکمه
 @bot.message_handler(content_types=['contact'])
@@ -146,10 +145,10 @@ def handle_name(message):
         user_data[cid]["state"] = USER_STATES['SUBAREA']
         send_legal_subareas(cid)
     else:
-        user_data[cid]["state"] = USER_STATES['DETAILS']
-        send_criminal_questions(cid)
+        user_data[cid]["state"] = USER_STATES['SUBAREA']
+        send_criminal_types(cid)
 
-# ارسال زیرشاخه‌های حقوقی
+# زیرشاخه‌های حقوقی
 def send_legal_subareas(cid):
     markup = telebot.types.InlineKeyboardMarkup(row_width=2)
     markup.add(
@@ -162,8 +161,7 @@ def send_legal_subareas(cid):
     )
     bot.send_message(cid, "🏛️ *زیرشاخه حقوقی:* لطفاً انتخاب کنید:", parse_mode="Markdown", reply_markup=markup)
 
-# پردازش جزئیات حقوقی
-def process_legal_details(call):
+def process_legal_subarea(call):
     cid = call.message.chat.id
     subarea = call.data.replace("legal_", "")
     user_data[cid]["subarea"] = subarea
@@ -177,8 +175,8 @@ def process_legal_details(call):
     }
     bot.send_message(cid, messages.get(subarea, "لطفاً جزئیات را وارد کنید:"), parse_mode="Markdown")
 
-# ارسال سوالات کیفری
-def send_criminal_questions(cid):
+# نوع جرایم کیفری
+def send_criminal_types(cid):
     markup = telebot.types.InlineKeyboardMarkup(row_width=2)
     markup.add(
         telebot.types.InlineKeyboardButton("🔍 جرایم مالی", callback_data="criminal_finance"),
@@ -186,11 +184,10 @@ def send_criminal_questions(cid):
     )
     bot.send_message(cid, "🔒 *نوع جرم را انتخاب کنید:*", parse_mode="Markdown", reply_markup=markup)
 
-# پردازش جزئیات کیفری
-def process_criminal_details(call):
+def process_criminal_subarea(call):
     cid = call.message.chat.id
     crime_type = call.data.replace("criminal_", "")
-    user_data[cid]["crime_type"] = crime_type
+    user_data[cid]["subarea"] = crime_type
     user_data[cid]["state"] = USER_STATES['DETAILS']
     bot.answer_callback_query(call.id)
     messages = {
@@ -200,21 +197,61 @@ def process_criminal_details(call):
     bot.send_message(cid, messages.get(crime_type, "لطفاً جزئیات را وارد کنید:"), parse_mode="Markdown")
 
 # دریافت جزئیات نهایی
-def handle_details(message):
+def handle_details_text(message):
     cid = message.chat.id
-    user_data[cid]["details"] = message.text.strip()
-    bot.send_message(cid, "✅ جزئیات شما ثبت شد. همکاران ما به زودی با شما تماس می‌گیرند.", reply_markup=main_keyboard())
-    # ارسال به ادمین
-    bot.send_message(ADMIN_ID, f"کاربر جدید:\nنام: {user_data[cid].get('name')}\nشماره: {user_data[cid].get('phone')}\nنوع مشاوره: {user_data[cid].get('type')}\nجزئیات: {user_data[cid].get('details')}")
+    details = message.text.strip()
+    user_data[cid]["details"] = details
+    user_data[cid]["state"] = USER_STATES['CONFIRM']
+    summary = f"""
+✅ اطلاعات شما ثبت شد:
 
-# ======= مسیر Flask برای Webhook =======
-@app.route("/", methods=["POST"])
+📞 شماره: {user_data[cid]['phone']}
+👤 نام: {user_data[cid]['name']}
+📌 حوزه: {user_data[cid]['type']}
+📂 زیرشاخه: {user_data[cid]['subarea']}
+📝 جزئیات: {details}
+
+آیا تایید می‌کنید؟
+"""
+    markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    markup.add("تایید ✅", "ویرایش 🔄")
+    bot.send_message(cid, summary, reply_markup=markup)
+
+# تایید یا ویرایش
+def handle_confirmation(message):
+    cid = message.chat.id
+    text = message.text.strip()
+    if text == "تایید ✅":
+        send_to_admin(cid)
+        bot.send_message(cid, "✅ مشاوره شما ثبت شد. به زودی با شما تماس می‌گیریم.", reply_markup=main_keyboard())
+        user_data.pop(cid, None)
+    elif text == "ویرایش 🔄":
+        start_consultation_process(cid)
+    else:
+        bot.send_message(cid, "لطفاً یکی از گزینه‌ها را انتخاب کنید.")
+
+def send_to_admin(cid):
+    data = user_data[cid]
+    msg = f"""
+⚖️ درخواست مشاوره جدید:
+
+📞 شماره: {data['phone']}
+👤 نام: {data['name']}
+📌 حوزه: {data['type']}
+📂 زیرشاخه: {data['subarea']}
+📝 جزئیات: {data['details']}
+"""
+    bot.send_message(ADMIN_ID, msg)
+
+# Flask Webhook
+@app.route('/', methods=['POST'])
 def webhook():
-    json_str = request.get_data().decode("utf-8")
+    json_str = request.get_data().decode('utf-8')
     update = telebot.types.Update.de_json(json_str)
     bot.process_new_updates([update])
-    return "!", 200
+    return 'ok', 200
 
-# اجرای سرور Flask
 if __name__ == "__main__":
+    bot.remove_webhook()
+    bot.set_webhook(url=WEBHOOK_URL)
     app.run(host="0.0.0.0", port=5000)
