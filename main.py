@@ -1,28 +1,22 @@
 import telebot
 from flask import Flask, request
-import os
 import re
-import logging
 
-# تنظیمات logging
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
-
+# ======================
 # تنظیمات ربات
-TOKEN = os.getenv("TOKEN")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
-ADMIN_ID = int(os.getenv("ADMIN_ID"))
+# ======================
+TOKEN = "8010785406:AAGU3XARPR_GzihDYS8T624bPTEU8ildmQ8"
+ADMIN_ID = 7549512366
+WEBHOOK_URL = "https://bot-ltl5.onrender.com/"  # لینک Webhook شما
 
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
-# داده‌های کاربران
+# ======================
+# داده‌های کاربران و وضعیت‌ها
+# ======================
 user_data = {}
 
-# وضعیت‌ها
 USER_STATES = {
     'START': 0,
     'PHONE': 1,
@@ -31,18 +25,24 @@ USER_STATES = {
     'SUBAREA': 4
 }
 
+# ======================
 # کیبورد اصلی
+# ======================
 def main_keyboard():
     markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add("📞 تماس با پشتیبانی", "ℹ️ درباره ما", "⚖️ درخواست مشاوره جدید")
     return markup
 
+# ======================
 # اعتبارسنجی شماره تلفن ایرانی
+# ======================
 def validate_iranian_phone_number(phone):
     pattern = r'^(\+98|0)?9\d{9}$'
     return re.match(pattern, phone) is not None
 
-# شروع ربات
+# ======================
+# دستور /start
+# ======================
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     cid = message.chat.id
@@ -56,12 +56,14 @@ def send_welcome(message):
 """
     bot.send_message(cid, welcome_text, parse_mode="Markdown", reply_markup=main_keyboard())
 
+# ======================
 # مدیریت پیام‌های متنی
+# ======================
 @bot.message_handler(func=lambda m: True)
 def handle_all_messages(message):
     cid = message.chat.id
     text = message.text
-    
+
     if text == "📞 تماس با پشتیبانی":
         bot.send_message(cid, "📞 تماس با پشتیبانی:\n☎️ 021-12345678\n🕒 9 صبح تا 5 عصر", reply_markup=main_keyboard())
     elif text == "ℹ️ درباره ما":
@@ -83,7 +85,9 @@ def handle_all_messages(message):
         else:
             bot.send_message(cid, "لطفاً از منوی زیر گزینه‌ای انتخاب کنید:", reply_markup=main_keyboard())
 
+# ======================
 # شروع فرآیند مشاوره
+# ======================
 def start_consultation_process(cid):
     user_data[cid] = {'state': USER_STATES['START']}
     markup = telebot.types.InlineKeyboardMarkup(row_width=2)
@@ -93,12 +97,14 @@ def start_consultation_process(cid):
     )
     bot.send_message(cid, "لطفاً حوزه مشاوره را انتخاب کنید:", reply_markup=markup)
 
+# ======================
 # مدیریت callback‌ها
+# ======================
 @bot.callback_query_handler(func=lambda c: True)
 def handle_callbacks(call):
     cid = call.message.chat.id
     data = call.data
-    
+
     if data in ["legal", "criminal"]:
         user_data[cid] = {"type": data, "state": USER_STATES['PHONE']}
         bot.answer_callback_query(call.id)
@@ -111,7 +117,9 @@ def handle_callbacks(call):
     elif data.startswith("criminal_"):
         process_criminal_details(call)
 
+# ======================
 # دریافت شماره تماس از دکمه
+# ======================
 @bot.message_handler(content_types=['contact'])
 def handle_contact(message):
     cid = message.chat.id
@@ -120,7 +128,9 @@ def handle_contact(message):
         user_data[cid]["state"] = USER_STATES['NAME']
         bot.send_message(cid, "✅ شماره ثبت شد. لطفاً نام و نام خانوادگی را وارد کنید:", reply_markup=telebot.types.ReplyKeyboardRemove())
 
+# ======================
 # دریافت شماره تماس متنی
+# ======================
 def handle_phone_text(message):
     cid = message.chat.id
     phone = message.text.strip()
@@ -131,7 +141,9 @@ def handle_phone_text(message):
     else:
         bot.send_message(cid, "❌ شماره معتبر نیست. لطفاً دوباره وارد کنید:")
 
+# ======================
 # دریافت نام
+# ======================
 def handle_name(message):
     cid = message.chat.id
     name = message.text.strip()
@@ -146,7 +158,9 @@ def handle_name(message):
         user_data[cid]["state"] = USER_STATES['DETAILS']
         send_criminal_questions(cid)
 
+# ======================
 # ارسال زیرشاخه‌های حقوقی
+# ======================
 def send_legal_subareas(cid):
     markup = telebot.types.InlineKeyboardMarkup(row_width=2)
     markup.add(
@@ -159,7 +173,9 @@ def send_legal_subareas(cid):
     )
     bot.send_message(cid, "🏛️ *زیرشاخه حقوقی:* لطفاً انتخاب کنید:", parse_mode="Markdown", reply_markup=markup)
 
+# ======================
 # پردازش جزئیات حقوقی
+# ======================
 def process_legal_details(call):
     cid = call.message.chat.id
     subarea = call.data.replace("legal_", "")
@@ -174,7 +190,9 @@ def process_legal_details(call):
     }
     bot.send_message(cid, messages.get(subarea, "لطفاً جزئیات را وارد کنید:"), parse_mode="Markdown")
 
+# ======================
 # ارسال سوالات کیفری
+# ======================
 def send_criminal_questions(cid):
     markup = telebot.types.InlineKeyboardMarkup(row_width=2)
     markup.add(
@@ -183,7 +201,9 @@ def send_criminal_questions(cid):
     )
     bot.send_message(cid, "🔒 *نوع جرم را انتخاب کنید:*", parse_mode="Markdown", reply_markup=markup)
 
+# ======================
 # پردازش جزئیات کیفری
+# ======================
 def process_criminal_details(call):
     cid = call.message.chat.id
     crime_type = call.data.replace("criminal_", "")
@@ -196,4 +216,41 @@ def process_criminal_details(call):
     }
     bot.send_message(cid, messages.get(crime_type, "لطفاً جزئیات را وارد کنید:"), parse_mode="Markdown")
 
+# ======================
 # دریافت جزئیات نهایی
+# ======================
+def handle_details(message):
+    cid = message.chat.id
+    details = message.text.strip()
+    user_data[cid]["details"] = details
+
+    # ارسال به ادمین
+    summary = f"👤 نام و نام خانوادگی: {user_data[cid].get('name')}\n"
+    summary += f"📞 شماره: {user_data[cid].get('phone')}\n"
+    if user_data[cid]["type"] == "legal":
+        summary += f"⚖️ حوزه حقوقی: {user_data[cid].get('subarea')}\n"
+    else:
+        summary += f"🔒 حوزه کیفری: {user_data[cid].get('crime_type')}\n"
+    summary += f"📝 جزئیات: {details}"
+
+    bot.send_message(ADMIN_ID, summary)
+    bot.send_message(cid, "✅ درخواست شما ثبت شد. به زودی با شما تماس می‌گیریم.", reply_markup=main_keyboard())
+    user_data.pop(cid, None)
+
+# ======================
+# Flask Webhook
+# ======================
+@app.route("/", methods=["POST"])
+def webhook():
+    json_string = request.get_data().decode('utf-8')
+    update = telebot.types.Update.de_json(json_string)
+    bot.process_new_updates([update])
+    return "!", 200
+
+# ======================
+# راه‌اندازی Webhook روی Render
+# ======================
+if __name__ == "__main__":
+    bot.remove_webhook()
+    bot.set_webhook(url=WEBHOOK_URL)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
