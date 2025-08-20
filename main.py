@@ -54,9 +54,13 @@ def send_welcome(message):
 def handle_all_messages(message):
     cid = message.chat.id
     text = message.text
-    
+
     if text == "📞 تماس با پشتیبانی":
-        bot.send_message(cid, "📞 تماس با پشتیبانی:\n☎️ 021-12345678\n🕒 9 صبح تا 5 عصر", reply_markup=main_keyboard())
+        bot.send_message(
+            cid,
+            "📞 تماس با پشتیبانی:\n☎️ 09001003914\n🕒 ساعت 10 صبح تا 18",
+            reply_markup=main_keyboard()
+        )
     elif text == "ℹ️ درباره ما":
         bot.send_message(cid,
             "🏛️ *درباره elawfirm:*\nما گروهی از وکلای متخصص هستیم.\n✅ خدمات: مشاوره حقوقی، کیفری، لوایح و وکالت",
@@ -65,6 +69,7 @@ def handle_all_messages(message):
     elif text == "⚖️ درخواست مشاوره جدید":
         start_consultation_process(cid)
     else:
+        # مدیریت مراحل مشاوره
         if cid in user_data:
             state = user_data[cid].get('state')
             if state == USER_STATES['PHONE']:
@@ -78,7 +83,6 @@ def handle_all_messages(message):
 
 # شروع فرآیند مشاوره
 def start_consultation_process(cid):
-    # شروع از مرحله شماره تماس
     user_data[cid] = {'state': USER_STATES['PHONE']}
     markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     button_phone = telebot.types.KeyboardButton("📱 ارسال شماره تماس", request_contact=True)
@@ -110,7 +114,6 @@ def handle_name(message):
         user_data[cid]["name"] = name
         user_data[cid]["state"] = USER_STATES['AREA']
 
-        # حالا می‌ره سراغ انتخاب حوزه
         markup = telebot.types.InlineKeyboardMarkup(row_width=2)
         markup.add(
             telebot.types.InlineKeyboardButton("⚖️ حقوقی", callback_data="area_legal"),
@@ -156,21 +159,16 @@ def handle_callbacks(call):
         )
         bot.send_message(cid, "لطفاً موضوع دقیق‌تر را انتخاب کنید:", reply_markup=markup)
 
-    elif data.startswith("legal_"):
-        sub = data.replace("legal_", "")
-        user_data[cid]["subarea"] = sub
+    elif data.startswith("legal_") or data.startswith("criminal_"):
+        subarea = data.split("_")[1]
+        user_data[cid]["subarea"] = subarea
         user_data[cid]["state"] = USER_STATES['DETAILS']
-        msg = LEGAL_QUESTIONS.get(sub, "لطفاً جزئیات را وارد کنید:")
-        if isinstance(msg, list):
-            send_option_question(cid, msg)
-        else:
-            bot.send_message(cid, msg)
 
-    elif data.startswith("criminal_"):
-        sub = data.replace("criminal_", "")
-        user_data[cid]["subarea"] = sub
-        user_data[cid]["state"] = USER_STATES['DETAILS']
-        msg = CRIMINAL_QUESTIONS.get(sub, "لطفاً جزئیات را وارد کنید:")
+        if data.startswith("legal_"):
+            msg = LEGAL_QUESTIONS.get(subarea, "لطفاً جزئیات را وارد کنید:")
+        else:
+            msg = CRIMINAL_QUESTIONS.get(subarea, "لطفاً جزئیات را وارد کنید:")
+
         if isinstance(msg, list):
             send_option_question(cid, msg)
         else:
@@ -179,6 +177,7 @@ def handle_callbacks(call):
     elif data.startswith("details_"):
         answer = data.replace("details_", "")
         user_data[cid]["details"] = answer
+        user_data[cid]["state"] = USER_STATES['START']
         bot.send_message(cid, f"✅ پاسخ شما ثبت شد: {answer}", reply_markup=main_keyboard())
         bot.send_message(ADMIN_ID, f"کاربر {user_data[cid].get('name','ناشناس')} شماره {user_data[cid].get('phone','---')}:\n{answer}")
 
@@ -187,27 +186,16 @@ def send_option_question(cid, options):
     markup = telebot.types.InlineKeyboardMarkup(row_width=1)
     for opt in options:
         markup.add(telebot.types.InlineKeyboardButton(opt, callback_data=f"details_{opt}"))
-    bot.send_message(cid, "لطفاً گزینه مورد نظر را انتخاب کنید یا متن خود را وارد کنید:", reply_markup=markup)
+    bot.send_message(cid, "لطفاً یکی از گزینه‌ها را انتخاب کنید یا متن خود را وارد نمایید:", reply_markup=markup)
 
-# دریافت جزئیات
+# دریافت جزئیات متنی
 def handle_details(message):
     cid = message.chat.id
+    if user_data.get(cid, {}).get("state") != USER_STATES['DETAILS']:
+        return
+
     details = message.text.strip()
     user_data[cid]["details"] = details
+    user_data[cid]["state"] = USER_STATES['START']
     bot.send_message(cid, "✅ اطلاعات شما ثبت شد. به زودی با شما تماس خواهیم گرفت.", reply_markup=main_keyboard())
-    bot.send_message(ADMIN_ID, f"کاربر {user_data[cid].get('name','ناشناس')} شماره {user_data[cid].get('phone','---')}:\n{details}")
-
-# Flask webhook
-@app.route('/', methods=['POST'])
-def webhook():
-    json_str = request.get_data().decode('utf-8')
-    update = telebot.types.Update.de_json(json_str)
-    bot.process_new_updates([update])
-    return '!', 200
-
-# تنظیم Webhook
-bot.remove_webhook()
-bot.set_webhook(url=WEBHOOK_URL)
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    bot.send_message(ADMIN_ID, f"کاربر {user_data[cid].get('name','ناشناس')} شماره {user_data[c
